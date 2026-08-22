@@ -47,6 +47,26 @@ class ProtocolException extends PrivacyException {
   const ProtocolException(super.message);
 }
 
+/// Not enough shielded balance in a token to cover a spend.
+///
+/// Distinct from a protocol error: nothing is malformed, the wallet simply does
+/// not hold enough. Callers usually want to show this to the user rather than
+/// treat it as a failure.
+class InsufficientNotesException extends PrivacyException {
+  InsufficientNotesException({
+    required this.requested,
+    required this.available,
+    required this.token,
+  }) : super(
+          'Need $requested but only $available is available in token '
+          '0x${token.toRadixString(16)}',
+        );
+
+  final BigInt requested;
+  final BigInt available;
+  final BigInt token;
+}
+
 /// JSON-RPC error code the prover returns when it is temporarily overloaded.
 const int serviceBusyCode = -32005;
 

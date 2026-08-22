@@ -1,0 +1,298 @@
+/// Note selection and the shield, unshield, and private transfer flows.
+library;
+
+import 'package:test/test.dart';
+import 'package:tip_privacy/tip_privacy.dart';
+
+BigInt _b(int v) => BigInt.from(v);
+
+final _token = _b(0x1234);
+final _otherToken = _b(0x9999);
+
+SpendableNote _note(int amount, {int index = 0, BigInt? token}) =>
+    SpendableNote(
+      channelKey: _b(0xdef),
+      token: token ?? _token,
+      index: index,
+      amount: _b(amount),
+    );
+
+/// Predictable randomness so a flow's output can be asserted exactly.
+class _FixedRandom implements RandomSource {
+  int _felt = 0;
+  int _salt = 0;
+
+  @override
+  BigInt nextFelt() => _b(0xf00 + _felt++);
+
+  @override
+  BigInt nextNoteSalt() => _b(0x500 + _salt++);
+}
+
+void main() {
+  group('selectNotes', () {
+    test('picks a single note that covers the amount', () {
+      final selection = selectNotes(
+        available: [_note(100, index: 0), _note(50, index: 1)],
+        token: _token,
+        amount: _b(80),
+      );
+      expect(selection.notes, hasLength(1));
+      expect(selection.notes.single.amount, equals(_b(100)));
+      expect(selection.change, equals(_b(20)));
+    });
+
+    test('combines notes when no single one is enough', () {
+      final selection = selectNotes(
+        available: [_note(30, index: 0), _note(40, index: 1)],
+        token: _token,
+        amount: _b(60),
+      );
+      expect(selection.notes, hasLength(2));
+      expect(selection.total, equals(_b(70)));
+      expect(selection.change, equals(_b(10)));
+    });
+
+    test('prefers larger notes to keep the spend count down', () {
+      // Every spent note publishes a nullifier, so fewer is quieter on chain.
+      final selection = selectNotes(
+        available: [
+          _note(10, index: 0),
+          _note(90, index: 1),
+          _note(10, index: 2),
+        ],
+        token: _token,
+        amount: _b(85),
+      );
+      expect(selection.notes, hasLength(1));
+      expect(selection.notes.single.index, equals(1));
+    });
+
+    test('leaves no change on an exact match', () {
+      final selection = selectNotes(
+        available: [_note(100)],
+        token: _token,
+        amount: _b(100),
+      );
+      expect(selection.change, equals(BigInt.zero));
+    });
+
+    test('ignores notes in other tokens', () {
+      expect(
+        () => selectNotes(
+          available: [_note(1000, token: _otherToken)],
+          token: _token,
+          amount: _b(1),
+        ),
+        throwsA(isA<InsufficientNotesException>()),
+      );
+    });
+
+    test('reports how much was actually available when short', () {
+      try {
+        selectNotes(
+          available: [_note(30), _note(20, index: 1)],
+          token: _token,
+          amount: _b(100),
+        );
+        fail('expected InsufficientNotesException');
+      } on InsufficientNotesException catch (e) {
+        expect(e.requested, equals(_b(100)));
+        expect(e.available, equals(_b(50)));
+      }
+    });
+
+    test('rejects a non-positive amount', () {
+      expect(
+        () => selectNotes(
+          available: [_note(100)],
+          token: _token,
+          amount: BigInt.zero,
+        ),
+        throwsA(isA<ProtocolException>()),
+      );
+    });
+  });
+
+  group('buildShield', () {
+    test('deposits then creates the matching note', () {
+      final actions = buildShield(
+        token: _token,
+        amount: _b(1000),
+        recipientAddr: _b(0x123),
+        recipientPublicKey: _b(0xabc),
+        noteIndex: 0,
+        random: _FixedRandom(),
+      );
+
+      expect(actions, hasLength(2));
+      expect(actions[0], isA<Deposit>());
+      expect(actions[1], isA<CreateEncNote>());
+      expect((actions[0] as Deposit).amount, equals(_b(1000)));
+      // The note records the same value that was deposited.
+      expect((actions[1] as CreateEncNote).amount, equals(_b(1000)));
+    });
+  });
+
+  group('buildUnshield', () {
+    test('spends notes, withdraws, and returns change', () {
+      final actions = buildUnshield(
+        available: [_note(100)],
+        token: _token,
+        amount: _b(60),
+        toAddr: _b(0xaaa),
+        selfAddr: _b(0x123),
+        selfPublicKey: _b(0xabc),
+        changeNoteIndex: 7,
+        random: _FixedRandom(),
+      );
+
+      expect(actions, hasLength(3));
+      expect(actions[0], isA<UseNote>());
+      expect(actions[1], isA<Withdraw>());
+      expect(actions[2], isA<CreateEncNote>());
+
+      expect((actions[1] as Withdraw).amount, equals(_b(60)));
+      final change = actions[2] as CreateEncNote;
+      expect(change.amount, equals(_b(40)));
+      expect(change.recipientAddr, equals(_b(0x123)));
+      expect(change.index, equals(7));
+    });
+
+    test('omits the change note on an exact spend', () {
+      final actions = buildUnshield(
+        available: [_note(100)],
+        token: _token,
+        amount: _b(100),
+        toAddr: _b(0xaaa),
+        selfAddr: _b(0x123),
+        selfPublicKey: _b(0xabc),
+        changeNoteIndex: 7,
+        random: _FixedRandom(),
+      );
+
+      expect(actions, hasLength(2));
+      expect(actions.whereType<CreateEncNote>(), isEmpty);
+    });
+
+    test('spends one note per input', () {
+      final actions = buildUnshield(
+        available: [_note(30, index: 0), _note(40, index: 1)],
+        token: _token,
+        amount: _b(65),
+        toAddr: _b(0xaaa),
+        selfAddr: _b(0x123),
+        selfPublicKey: _b(0xabc),
+        changeNoteIndex: 7,
+        random: _FixedRandom(),
+      );
+
+      expect(actions.whereType<UseNote>(), hasLength(2));
+      expect(
+        (actions.whereType<CreateEncNote>().single).amount,
+        equals(_b(5)),
+      );
+    });
+
+    test('refuses to build when the balance is short', () {
+      expect(
+        () => buildUnshield(
+          available: [_note(10)],
+          token: _token,
+          amount: _b(100),
+          toAddr: _b(0xaaa),
+          selfAddr: _b(0x123),
+          selfPublicKey: _b(0xabc),
+          changeNoteIndex: 7,
+          random: _FixedRandom(),
+        ),
+        throwsA(isA<InsufficientNotesException>()),
+      );
+    });
+  });
+
+  group('buildPrivateTransfer', () {
+    test('pays the recipient and keeps the change', () {
+      final actions = buildPrivateTransfer(
+        available: [_note(100)],
+        token: _token,
+        amount: _b(70),
+        recipientAddr: _b(0x456),
+        recipientPublicKey: _b(0xbcd),
+        recipientNoteIndex: 0,
+        selfAddr: _b(0x123),
+        selfPublicKey: _b(0xabc),
+        changeNoteIndex: 3,
+        random: _FixedRandom(),
+      );
+
+      expect(actions, hasLength(3));
+      final notes = actions.whereType<CreateEncNote>().toList();
+      expect(notes, hasLength(2));
+
+      expect(notes[0].recipientAddr, equals(_b(0x456)));
+      expect(notes[0].amount, equals(_b(70)));
+      expect(notes[1].recipientAddr, equals(_b(0x123)));
+      expect(notes[1].amount, equals(_b(30)));
+    });
+
+    test('never emits a Withdraw, so nothing becomes public', () {
+      final actions = buildPrivateTransfer(
+        available: [_note(100)],
+        token: _token,
+        amount: _b(70),
+        recipientAddr: _b(0x456),
+        recipientPublicKey: _b(0xbcd),
+        recipientNoteIndex: 0,
+        selfAddr: _b(0x123),
+        selfPublicKey: _b(0xabc),
+        changeNoteIndex: 3,
+        random: _FixedRandom(),
+      );
+
+      expect(actions.whereType<Withdraw>(), isEmpty);
+      expect(actions.whereType<Deposit>(), isEmpty);
+    });
+
+    test('gives each note a distinct salt', () {
+      final actions = buildPrivateTransfer(
+        available: [_note(100)],
+        token: _token,
+        amount: _b(70),
+        recipientAddr: _b(0x456),
+        recipientPublicKey: _b(0xbcd),
+        recipientNoteIndex: 0,
+        selfAddr: _b(0x123),
+        selfPublicKey: _b(0xabc),
+        changeNoteIndex: 3,
+        random: _FixedRandom(),
+      );
+
+      // A reused salt would link the recipient's note to the change note and
+      // undo the privacy of the transfer.
+      final salts =
+          actions.whereType<CreateEncNote>().map((n) => n.salt).toSet();
+      expect(salts, hasLength(2));
+    });
+
+    test('encodes to valid calldata end to end', () {
+      final encoded = encodeActions(
+        buildPrivateTransfer(
+          available: [_note(100)],
+          token: _token,
+          amount: _b(70),
+          recipientAddr: _b(0x456),
+          recipientPublicKey: _b(0xbcd),
+          recipientNoteIndex: 0,
+          selfAddr: _b(0x123),
+          selfPublicKey: _b(0xabc),
+          changeNoteIndex: 3,
+          random: _FixedRandom(),
+        ),
+      );
+
+      expect(encoded.first, equals(_b(3)));
+      expect(encoded[1], equals(_b(6))); // UseNote
+    });
+  });
+}
