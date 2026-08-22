@@ -489,7 +489,7 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/starknet"
-      ref: main
+      ref: "3f1720a8f7b1094993144ca2ba92e840b7f98d29"
       resolved-ref: "3f1720a8f7b1094993144ca2ba92e840b7f98d29"
       url: "https://github.com/focustree/starknet.dart.git"
     source: git
@@ -498,7 +498,7 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/starknet_provider"
-      ref: main
+      ref: "3f1720a8f7b1094993144ca2ba92e840b7f98d29"
       resolved-ref: "3f1720a8f7b1094993144ca2ba92e840b7f98d29"
       url: "https://github.com/focustree/starknet.dart.git"
     source: git

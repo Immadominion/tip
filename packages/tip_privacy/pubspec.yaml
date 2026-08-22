@@ -6,6 +6,10 @@ version: 0.0.1
 environment:
   sdk: ^3.5.3
 
+# starknet.dart is pinned to an exact commit rather than a branch. A mutable
+# `ref: main` would let a dependency that signs transactions and handles key
+# material change under us between builds, which is not a risk worth taking in
+# a wallet. Bump this deliberately, and re-run the test suite when you do.
 dependencies:
   cryptography: ^2.9.0
   http: ^1.2.2
@@ -13,7 +17,7 @@ dependencies:
   starknet:
     git:
       url: https://github.com/focustree/starknet.dart.git
-      ref: main
+      ref: 3f1720a8f7b1094993144ca2ba92e840b7f98d29
       path: packages/starknet
 
 dev_dependencies:
@@ -28,10 +32,10 @@ dependency_overrides:
   starknet:
     git:
       url: https://github.com/focustree/starknet.dart.git
-      ref: main
+      ref: 3f1720a8f7b1094993144ca2ba92e840b7f98d29
       path: packages/starknet
   starknet_provider:
     git:
       url: https://github.com/focustree/starknet.dart.git
-      ref: main
+      ref: 3f1720a8f7b1094993144ca2ba92e840b7f98d29
       path: packages/starknet_provider
