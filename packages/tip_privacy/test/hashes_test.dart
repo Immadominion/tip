@@ -12,8 +12,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 import 'package:tip_privacy/tip_privacy.dart';
 
-BigInt _felt(String hex) =>
-    BigInt.parse(hex.replaceFirst('0x', ''), radix: 16);
+BigInt _felt(String hex) => BigInt.parse(hex.replaceFirst('0x', ''), radix: 16);
 
 void main() {
   final fixture = jsonDecode(
@@ -198,8 +197,7 @@ void main() {
         HashTags.outgoingChannelId,
         HashTags.identityKey,
       ];
-      final hashes =
-          tags.map((tag) => poseidonHash([tag, BigInt.one])).toSet();
+      final hashes = tags.map((tag) => poseidonHash([tag, BigInt.one])).toSet();
       expect(hashes, hasLength(tags.length));
     });
 

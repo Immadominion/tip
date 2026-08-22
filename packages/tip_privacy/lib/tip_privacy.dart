@@ -5,6 +5,7 @@
 /// reference values generated from that project's Cairo contracts.
 library;
 
+export 'src/ecdh.dart';
 export 'src/field.dart';
 export 'src/hashes.dart';
 export 'src/short_string.dart';
