@@ -23,3 +23,4 @@ export 'src/pool/serde.dart';
 export 'src/ohttp/varint.dart';
 export 'src/proving/proving_client.dart';
 export 'src/short_string.dart';
+export 'src/viewing_key.dart';
