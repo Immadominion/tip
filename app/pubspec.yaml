@@ -1,0 +1,50 @@
+name: tip
+description: A private, mobile-native wallet for Starknet.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Protocol client
+  tip_privacy:
+    path: ../packages/tip_privacy
+
+  # Starknet account layer
+  starknet:
+    git:
+      url: https://github.com/focustree/starknet.dart.git
+      ref: main
+      path: packages/starknet
+
+  # Key material at rest
+  flutter_secure_storage: ^11.0.0
+
+  # Seed generation and derivation
+  bip39: ^1.0.6
+
+  google_fonts: ^6.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+dependency_overrides:
+  starknet:
+    git:
+      url: https://github.com/focustree/starknet.dart.git
+      ref: main
+      path: packages/starknet
+  starknet_provider:
+    git:
+      url: https://github.com/focustree/starknet.dart.git
+      ref: main
+      path: packages/starknet_provider
+
+flutter:
+  uses-material-design: true
