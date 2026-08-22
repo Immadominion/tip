@@ -1,0 +1,45 @@
+# Secrets, never commit
+.env
+.env.*
+*.pem
+*.p12
+*.keystore
+!debug.keystore
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.g.dart
+*.freezed.dart
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+**/Flutter/App.framework
+**/Flutter/Flutter.framework
+**/Flutter/Generated.xcconfig
+**/Flutter/ephemeral
+**/Flutter/flutter_assets/
+*.ipa
+
+# Android
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/local.properties
+*.apk
+*.aab
+
+# macOS/editor
+.DS_Store
+.idea/
+.vscode/
+*.iml
