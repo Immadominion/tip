@@ -8,4 +8,5 @@ library;
 export 'src/ecdh.dart';
 export 'src/field.dart';
 export 'src/hashes.dart';
+export 'src/masking.dart';
 export 'src/short_string.dart';
