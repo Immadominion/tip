@@ -1,0 +1,35 @@
+name: tip_privacy
+description: Native Dart client for the STRK20 privacy pool on Starknet.
+publish_to: none
+version: 0.0.1
+
+environment:
+  sdk: ^3.5.3
+
+dependencies:
+  pointycastle: ^3.9.1
+  starknet:
+    git:
+      url: https://github.com/focustree/starknet.dart.git
+      ref: main
+      path: packages/starknet
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.8
+
+# starknet.dart is a melos monorepo whose published `starknet` package depends on
+# `starknet_provider` from pub.dev, which in turn depends back on `starknet` from
+# pub.dev. Pinning only `starknet` to git therefore fails to resolve. Overriding
+# both sibling packages to the same git ref breaks the cycle.
+dependency_overrides:
+  starknet:
+    git:
+      url: https://github.com/focustree/starknet.dart.git
+      ref: main
+      path: packages/starknet
+  starknet_provider:
+    git:
+      url: https://github.com/focustree/starknet.dart.git
+      ref: main
+      path: packages/starknet_provider
