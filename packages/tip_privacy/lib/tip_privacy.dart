@@ -13,4 +13,5 @@ export 'src/errors.dart';
 export 'src/field.dart';
 export 'src/hashes.dart';
 export 'src/masking.dart';
+export 'src/proving/proving_client.dart';
 export 'src/short_string.dart';

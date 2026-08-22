@@ -46,3 +46,35 @@ class DiscoveryException extends PrivacyException {
 class ProtocolException extends PrivacyException {
   const ProtocolException(super.message);
 }
+
+/// JSON-RPC error code the prover returns when it is temporarily overloaded.
+const int serviceBusyCode = -32005;
+
+/// Errors from the proving service, carrying the JSON-RPC code so callers can
+/// branch on it.
+///
+/// Codes seen in practice:
+/// - `24` block not found
+/// - `55` account validation failed
+/// - `61` unsupported transaction version
+/// - `1000` invalid transaction input
+/// - `-32005` service busy, retry later
+/// - `-32603` internal prover error
+/// - `10000` rejected by the screening interceptor
+///
+/// Lives here rather than beside the proving client because [PrivacyException]
+/// is sealed, which buys callers exhaustive matching over every failure this
+/// package can produce.
+class ProvingException extends PrivacyException {
+  const ProvingException(this.code, super.message, {this.data});
+
+  final int code;
+  final String? data;
+
+  /// Whether retrying this request could plausibly succeed.
+  bool get isTransient => code == serviceBusyCode;
+
+  @override
+  String toString() =>
+      'ProvingException($code): $message${data == null ? '' : ': $data'}';
+}
