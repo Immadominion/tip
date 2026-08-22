@@ -16,7 +16,9 @@ and the Dart client it needs in order to exist.
 
 ### `packages/tip_privacy`
 
-A native Dart client for the STRK20 privacy pool. Currently implements:
+A native Dart client for the STRK20 privacy pool.
+
+**Protocol crypto**
 
 - The domain-separated Poseidon hash suite (note ids, nullifiers, channel keys,
   markers, and the encryption masks)
@@ -26,11 +28,33 @@ A native Dart client for the STRK20 privacy pool. Currently implements:
 - Additive masking for channel info, subchannel info, note amounts, and the
   auditor escrow
 
-Every primitive is checked against reference values generated from the Cairo
-contracts in starkware-libs/starknet-privacy, vendored into `test/fixtures` so
-the suite runs without a network or a Cairo toolchain.
+**Services**
 
-```
+- Discovery client with cursor pagination, per-token balances, and reorg
+  handling
+- Proving client over JSON-RPC, with exponential backoff when the prover is busy
+
+**Private transport**
+
+- HPKE (RFC 9180) base mode for DHKEM(X25519, HKDF-SHA256) / HKDF-SHA256 /
+  AES-128-GCM
+- Binary HTTP (RFC 9292) and QUIC variable-length integers (RFC 9000)
+- Oblivious HTTP (RFC 9458), so the viewing key is never visible to whatever
+  terminates TLS
+
+Transport is an interface. `PlainJsonTransport` is fine against a service you
+operate; `OhttpTransport` is a one-line swap for anything touching a real user's
+viewing key.
+
+**On testing.** Nothing here is checked against my own expectations. The
+protocol crypto is verified against reference values generated from the Cairo
+contracts in starkware-libs/starknet-privacy, and the transport stack against
+the worked examples published in the RFCs themselves: RFC 9180 Appendix A.1,
+RFC 9292 Figure 8, and the complete RFC 9458 Appendix A exchange, all reproduced
+byte for byte. Fixtures are vendored, so the suite runs with no network and no
+Cairo toolchain.
+
+```sh
 cd packages/tip_privacy
 dart pub get
 dart test
@@ -38,11 +62,10 @@ dart test
 
 ## Status
 
-Early build, in progress during the STRK20 Private Sprint. The crypto layer is
-landing first because everything else depends on it.
+In progress during the STRK20 Private Sprint. The client library is landing
+first because the app is a thin layer over it.
 
-Still to come: the Oblivious HTTP client for the discovery and proving
-services, action compilation against the pool contract, and the Flutter app
+Still to come: action compilation against the pool contract, and the Flutter app
 itself.
 
 ## Stack
