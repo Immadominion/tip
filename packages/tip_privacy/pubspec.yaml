@@ -7,6 +7,7 @@ environment:
   sdk: ^3.5.3
 
 dependencies:
+  cryptography: ^2.9.0
   http: ^1.2.2
   pointycastle: ^3.9.1
   starknet:
