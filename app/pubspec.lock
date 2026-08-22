@@ -495,7 +495,7 @@ packages:
     source: git
     version: "0.2.0"
   starknet_provider:
-    dependency: "direct overridden"
+    dependency: "direct main"
     description:
       path: "packages/starknet_provider"
       ref: main
