@@ -6,7 +6,11 @@ plugins {
 
 android {
     namespace = "xyz.usetip.tip"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_secure_storage 11 requires API 37. Staying on 11 rather than
+    // downgrading to 10.x is deliberate: the known silent-data-loss bug in
+    // 11 is on the 10-to-11 upgrade path, so a new wallet that starts here
+    // never has to migrate real seeds across it.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -19,7 +23,7 @@ android {
         applicationId = "xyz.usetip.tip"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
