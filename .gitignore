@@ -43,3 +43,6 @@ android/local.properties
 .idea/
 .vscode/
 *.iml
+
+# Dart package lockfiles (library packages should not pin)
+packages/*/pubspec.lock

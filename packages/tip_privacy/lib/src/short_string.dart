@@ -20,7 +20,11 @@ BigInt shortStringToFelt(String value) {
   }
   var result = BigInt.zero;
   for (final unit in value.codeUnits) {
-    if (unit > 0xff) {
+    // Cairo short strings are 7-bit ASCII. Rejecting anything above that is
+    // stricter than the reference implementation, which would happily pack a
+    // Latin-1 byte, but a loud failure beats silently encoding a tag that no
+    // Cairo contract would ever produce.
+    if (unit > 0x7f) {
       throw ArgumentError.value(
         value,
         'value',
