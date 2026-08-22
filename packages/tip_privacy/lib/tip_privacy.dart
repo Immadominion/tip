@@ -19,6 +19,7 @@ export 'src/ohttp/ohttp.dart';
 export 'src/ohttp/ohttp_transport.dart';
 export 'src/pool/actions.dart';
 export 'src/pool/flows.dart';
+export 'src/pool/proof_invocation.dart';
 export 'src/pool/serde.dart';
 export 'src/ohttp/varint.dart';
 export 'src/proving/proving_client.dart';
