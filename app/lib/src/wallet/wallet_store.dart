@@ -11,7 +11,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// Reads and writes the wallet seed to platform-encrypted storage.
 class WalletStore {
   WalletStore({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
 
@@ -47,17 +47,17 @@ class WalletStore {
       null;
 
   Future<String?> readSeedPhrase() => _storage.read(
-        key: _seedKey,
-        iOptions: _iosOptions,
-        aOptions: _androidOptions,
-      );
+    key: _seedKey,
+    iOptions: _iosOptions,
+    aOptions: _androidOptions,
+  );
 
   Future<void> writeSeedPhrase(String mnemonic) => _storage.write(
-        key: _seedKey,
-        value: mnemonic,
-        iOptions: _iosOptions,
-        aOptions: _androidOptions,
-      );
+    key: _seedKey,
+    value: mnemonic,
+    iOptions: _iosOptions,
+    aOptions: _androidOptions,
+  );
 
   /// Erases the seed.
   ///
@@ -65,8 +65,8 @@ class WalletStore {
   /// reliably clear an iOS Keychain entry, so "delete the app" is not a way for
   /// a user to erase their wallet and the UI should never imply that it is.
   Future<void> deleteSeedPhrase() => _storage.delete(
-        key: _seedKey,
-        iOptions: _iosOptions,
-        aOptions: _androidOptions,
-      );
+    key: _seedKey,
+    iOptions: _iosOptions,
+    aOptions: _androidOptions,
+  );
 }

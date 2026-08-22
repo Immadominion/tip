@@ -18,8 +18,17 @@ import 'package:starknet/starknet.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet.dart';
+import 'receive_screen.dart';
+import 'send_screen.dart';
 
 /// Placeholder until the account contract is chosen and deployed.
+/// STRK fee token. The same address on mainnet, sepolia, and devnet, per the
+/// pool's own constants.
+final strkTokenAddress = BigInt.parse(
+  '04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
+  radix: 16,
+);
+
 final _accountClassHash = Felt.fromHexString(
   '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f',
 );
@@ -42,8 +51,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _keys = WalletFactory(accountClassHash: _accountClassHash)
-        .deriveFrom(widget.mnemonic);
+    _keys = WalletFactory(
+      accountClassHash: _accountClassHash,
+    ).deriveFrom(widget.mnemonic);
   }
 
   @override
@@ -81,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: TipTheme.spaceXl),
-              const _Actions(),
+              _Actions(keys: _keys),
               const SizedBox(height: TipTheme.spaceXl),
               Text('Activity', style: text.titleLarge),
               const SizedBox(height: TipTheme.spaceMd),
@@ -112,8 +122,11 @@ class _AccountRow extends StatelessWidget {
             gradient: TipPalette.actionGradient,
             borderRadius: BorderRadius.circular(TipTheme.radiusSmall),
           ),
-          child: const Icon(Icons.shield_outlined,
-              color: Colors.white, size: 20),
+          child: const Icon(
+            Icons.shield_outlined,
+            color: Colors.white,
+            size: 20,
+          ),
         ),
         const SizedBox(width: TipTheme.spaceSm + 4),
         Expanded(
@@ -134,8 +147,11 @@ class _AccountRow extends StatelessWidget {
                   children: [
                     Text(keys.shortAddress, style: text.titleMedium),
                     const SizedBox(width: TipTheme.spaceXs),
-                    const Icon(Icons.copy_rounded,
-                        size: 14, color: TipPalette.inkFaint),
+                    const Icon(
+                      Icons.copy_rounded,
+                      size: 14,
+                      color: TipPalette.inkFaint,
+                    ),
                   ],
                 ),
               ),
@@ -233,46 +249,95 @@ class _ToggleOption extends StatelessWidget {
 }
 
 class _Actions extends StatelessWidget {
-  const _Actions();
+  const _Actions({required this.keys});
+
+  final WalletKeys keys;
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        Expanded(child: _ActionButton(icon: Icons.arrow_upward, label: 'Send')),
-        SizedBox(width: TipTheme.spaceSm + 4),
         Expanded(
-          child: _ActionButton(icon: Icons.arrow_downward, label: 'Receive'),
+          child: _ActionButton(
+            icon: Icons.arrow_upward,
+            label: 'Send',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => SendScreen(
+                  keys: keys,
+                  // Empty until discovery runs against real pool state. The
+                  // screen handles this honestly: it reports that there is
+                  // nothing to spend rather than pretending otherwise.
+                  notes: const [],
+                  token: strkTokenAddress,
+                ),
+              ),
+            ),
+          ),
         ),
-        SizedBox(width: TipTheme.spaceSm + 4),
-        Expanded(child: _ActionButton(icon: Icons.shield_moon, label: 'Shield')),
+        const SizedBox(width: TipTheme.spaceSm + 4),
+        Expanded(
+          child: _ActionButton(
+            icon: Icons.arrow_downward,
+            label: 'Receive',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    ReceiveScreen(address: keys.accountAddress.toHexString()),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: TipTheme.spaceSm + 4),
+        Expanded(
+          child: _ActionButton(
+            icon: Icons.shield_moon,
+            label: 'Shield',
+            onTap: () => ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                const SnackBar(
+                  content: Text('Shielding needs a funded account'),
+                ),
+              ),
+          ),
+        ),
       ],
     );
   }
 }
 
 class _ActionButton extends StatelessWidget {
-  const _ActionButton({required this.icon, required this.label});
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: TipTheme.spaceMd),
-      decoration: BoxDecoration(
-        color: TipPalette.surfaceRaised,
-        borderRadius: BorderRadius.circular(TipTheme.radiusLarge),
-        border: Border.all(color: TipPalette.border),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: TipPalette.accent, size: 22),
-          const SizedBox(height: TipTheme.spaceXs + 2),
-          Text(label, style: text.titleMedium),
-        ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(TipTheme.radiusLarge),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: TipTheme.spaceMd),
+        decoration: BoxDecoration(
+          color: TipPalette.surfaceRaised,
+          borderRadius: BorderRadius.circular(TipTheme.radiusLarge),
+          border: Border.all(color: TipPalette.border),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: TipPalette.accent, size: 22),
+            const SizedBox(height: TipTheme.spaceXs + 2),
+            Text(label, style: text.titleMedium),
+          ],
+        ),
       ),
     );
   }
@@ -289,8 +354,11 @@ class _EmptyActivity extends StatelessWidget {
         padding: const EdgeInsets.all(TipTheme.spaceLg),
         child: Column(
           children: [
-            const Icon(Icons.inbox_outlined,
-                size: 28, color: TipPalette.inkFaint),
+            const Icon(
+              Icons.inbox_outlined,
+              size: 28,
+              color: TipPalette.inkFaint,
+            ),
             const SizedBox(height: TipTheme.spaceSm),
             Text('Nothing here yet', style: text.titleMedium),
             const SizedBox(height: TipTheme.spaceXs),

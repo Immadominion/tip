@@ -55,10 +55,7 @@ void main() {
     });
 
     test('rejects a word that is not in the wordlist', () {
-      expect(
-        WalletFactory.isValidMnemonic('$_phrase notaword'),
-        isFalse,
-      );
+      expect(WalletFactory.isValidMnemonic('$_phrase notaword'), isFalse);
     });
 
     test('rejects empty input', () {
@@ -119,8 +116,10 @@ void main() {
     });
 
     test('derives a non-zero account address', () {
-      expect(factory.deriveFrom(_phrase).accountAddress.toBigInt(),
-          greaterThan(BigInt.zero));
+      expect(
+        factory.deriveFrom(_phrase).accountAddress.toBigInt(),
+        greaterThan(BigInt.zero),
+      );
     });
 
     test('shortens the address for display without losing the ends', () {

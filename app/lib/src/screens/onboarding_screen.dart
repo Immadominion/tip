@@ -46,19 +46,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: switch (_step) {
               _Step.welcome => _Welcome(onCreate: _createWallet),
               _Step.showPhrase => _ShowPhrase(
-                  mnemonic: _mnemonic!,
-                  onContinue: () =>
-                      setState(() => _step = _Step.confirmPhrase),
-                ),
+                mnemonic: _mnemonic!,
+                onContinue: () => setState(() => _step = _Step.confirmPhrase),
+              ),
               _Step.confirmPhrase => _ConfirmPhrase(
-                  mnemonic: _mnemonic!,
-                  onBack: () => setState(() => _step = _Step.showPhrase),
-                  onConfirmed: () => Navigator.of(context).pushReplacement(
-                    MaterialPageRoute<void>(
-                      builder: (_) => HomeScreen(mnemonic: _mnemonic!),
-                    ),
+                mnemonic: _mnemonic!,
+                onBack: () => setState(() => _step = _Step.showPhrase),
+                onConfirmed: () => Navigator.of(context).pushReplacement(
+                  MaterialPageRoute<void>(
+                    builder: (_) => HomeScreen(mnemonic: _mnemonic!),
                   ),
                 ),
+              ),
             },
           ),
         ),
@@ -258,8 +257,10 @@ class _ConfirmPhraseState extends State<_ConfirmPhrase> {
     for (var i = 0; i < _positions.length; i++) {
       final expected = words[_positions[i]];
       if (_controllers[i].text.trim().toLowerCase() != expected) {
-        setState(() => _error =
-            'Word ${_positions[i] + 1} does not match. Check your paper.');
+        setState(
+          () => _error =
+              'Word ${_positions[i] + 1} does not match. Check your paper.',
+        );
         return;
       }
     }
