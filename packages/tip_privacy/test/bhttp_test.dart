@@ -97,6 +97,8 @@ void main() {
           'host': 'www.example.com',
           'accept-language': 'en, mi',
         },
+        // Figure 8 writes the trailing empty sections explicitly.
+        truncateEmptyTrailingSections: false,
       );
 
       expect(_toHex(request.encode()), equals(expected));
@@ -127,7 +129,9 @@ void main() {
       final hex = _toHex(encoded);
       expect(hex, contains(_toHex(body)));
       expect(hex.startsWith('00' '04' '504f5354'), isTrue); // POST
-      expect(hex.endsWith('00'), isTrue); // empty trailer section
+      // Content is present, so it is written; the empty trailer section is
+      // truncated away, leaving the body as the final bytes.
+      expect(hex.endsWith(_toHex(body)), isTrue);
     });
 
     test('lowercases field names', () {

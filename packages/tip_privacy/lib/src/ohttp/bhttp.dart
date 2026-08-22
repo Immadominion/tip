@@ -27,6 +27,7 @@ class BinaryHttpRequest {
     this.authority = '',
     this.headers = const {},
     this.content = const [],
+    this.truncateEmptyTrailingSections = true,
   });
 
   final String method;
@@ -39,6 +40,16 @@ class BinaryHttpRequest {
 
   final Map<String, String> headers;
   final List<int> content;
+
+  /// Whether to drop a trailing run of zero-length sections.
+  ///
+  /// RFC 9292 section 3.8 permits this and a decoder must read a missing
+  /// section as empty, so both encodings are correct. The RFCs themselves are
+  /// split: Figure 8 writes the trailing zeros, while the inner request in
+  /// RFC 9458 Appendix A omits them. Truncating is the default because that is
+  /// the form the OHTTP specification demonstrates, and it is what this code
+  /// exists to speak.
+  final bool truncateEmptyTrailingSections;
 
   /// Encodes this request as a known-length BHTTP message.
   Uint8List encode() {
@@ -62,15 +73,28 @@ class BinaryHttpRequest {
       writeVarintBytes(fields, utf8.encode(value));
     });
     final fieldBytes = fields.takeBytes();
-    writeVarint(out, fieldBytes.length);
-    out.add(fieldBytes);
 
-    writeVarint(out, content.length);
-    out.add(content);
+    // RFC 9292 section 3.8: a run of zero-length sections at the end of a
+    // message may be omitted, and a decoder must read a missing section as
+    // empty. Truncating is what the RFC's own examples do, so matching it
+    // keeps encodings byte-identical to the spec.
+    // Trailers are never generated here, so the trailer section is the first
+    // candidate for truncation and content is the next.
+    final needContent = content.isNotEmpty || !truncateEmptyTrailingSections;
+    final needHeaders =
+        fieldBytes.isNotEmpty || needContent || !truncateEmptyTrailingSections;
 
-    // Empty trailer section. RFC 9292 section 3.8 allows omitting it, but
-    // writing the explicit zero is unambiguous and costs one byte.
-    writeVarint(out, 0);
+    if (needHeaders) {
+      writeVarint(out, fieldBytes.length);
+      out.add(fieldBytes);
+    }
+    if (needContent) {
+      writeVarint(out, content.length);
+      out.add(content);
+    }
+    if (!truncateEmptyTrailingSections) {
+      writeVarint(out, 0);
+    }
 
     return out.takeBytes();
   }
@@ -122,10 +146,20 @@ class BinaryHttpResponse {
       offset = _skipFieldSection(bytes, offset);
     }
 
+    // Any trailing run of zero-length sections may be omitted (RFC 9292
+    // section 3.8), so every read past this point has to tolerate the buffer
+    // simply ending. The RFC's own minimal response, 0140c8, stops right here.
     final headers = <String, String>{};
+    if (offset >= bytes.length) {
+      return BinaryHttpResponse(
+        statusCode: status,
+        headers: headers,
+        content: const [],
+      );
+    }
+
     offset = _readFieldSection(bytes, offset, headers);
 
-    // A truncated message may omit content and trailers entirely.
     if (offset >= bytes.length) {
       return BinaryHttpResponse(
         statusCode: status,
