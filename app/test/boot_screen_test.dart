@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tip/src/activity/activity_entry.dart';
 import 'package:tip/src/activity/activity_store.dart';
 import 'package:tip/src/screens/boot_screen.dart';
+import 'package:tip/src/security/app_lock.dart';
 import 'package:tip/src/theme/theme.dart';
 import 'package:tip/src/wallet/wallet.dart';
 import 'package:tip/src/wallet/wallet_store.dart';
@@ -34,6 +35,16 @@ class _FakeStore extends WalletStore {
   }
 }
 
+/// The real one reaches for a platform channel that never answers in a widget
+/// test, and an unsettled future stalls pumpAndSettle rather than failing.
+class _NoLock extends AppLock {
+  @override
+  Future<bool> get isAvailable async => false;
+
+  @override
+  Future<bool> isEnabled() async => false;
+}
+
 class _MemoryActivityStore extends ActivityStore {
   List<ActivityEntry> entries = const [];
 
@@ -48,7 +59,11 @@ Future<void> _pump(WidgetTester tester, WalletStore store) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: TipTheme.light,
-      home: BootScreen(store: store, activityStore: _MemoryActivityStore()),
+      home: BootScreen(
+        store: store,
+        activityStore: _MemoryActivityStore(),
+        lock: _NoLock(),
+      ),
     ),
   );
   await tester.pumpAndSettle();

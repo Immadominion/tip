@@ -10,6 +10,8 @@
 	<string>Tip</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>tip uses Face ID to unlock your wallet on this device.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>tip uses the camera to scan a Starknet address or a tip link. Nothing is recorded and nothing leaves your phone.</string>
 	<key>CFBundleURLTypes</key>

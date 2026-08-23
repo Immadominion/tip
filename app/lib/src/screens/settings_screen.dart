@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../chain/address.dart';
+import '../security/app_lock.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
@@ -20,9 +21,13 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     required this.wallet,
     required this.onErased,
+    this.lock,
   });
 
   final WalletController wallet;
+
+  /// Null in tests that do not exercise the lock.
+  final AppLock? lock;
 
   /// Called once the wallet has been removed from the device.
   final VoidCallback onErased;
@@ -34,7 +39,54 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _phraseVisible = false;
 
+  bool _lockAvailable = false;
+  bool _lockEnabled = false;
+  bool _lockBusy = false;
+
   WalletController get _wallet => widget.wallet;
+
+  @override
+  void initState() {
+    super.initState();
+    _readLock();
+  }
+
+  Future<void> _readLock() async {
+    final lock = widget.lock;
+    if (lock == null) return;
+    final available = await lock.isAvailable;
+    final enabled = await lock.isEnabled();
+    if (!mounted) return;
+    setState(() {
+      _lockAvailable = available;
+      _lockEnabled = enabled;
+    });
+  }
+
+  /// Turning the lock on asks for it first.
+  ///
+  /// Otherwise it is possible to enable a lock the device cannot actually
+  /// satisfy, and only find out on the next launch, with the wallet on the
+  /// other side of it.
+  Future<void> _toggleLock(bool wanted) async {
+    final lock = widget.lock;
+    if (lock == null) return;
+
+    setState(() => _lockBusy = true);
+    try {
+      final confirmed = await lock.authenticate(
+        reason: wanted ? 'Confirm to turn the lock on' : 'Confirm to turn it off',
+      );
+      if (!confirmed) {
+        if (mounted) _say('Not confirmed, so nothing changed.');
+        return;
+      }
+      await lock.setEnabled(wanted);
+      if (mounted) setState(() => _lockEnabled = wanted);
+    } finally {
+      if (mounted) setState(() => _lockBusy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +146,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
+
+            if (_lockAvailable) ...[
+              const SizedBox(height: TipTheme.spaceXl),
+              Text('Lock', style: text.titleLarge),
+              const SizedBox(height: TipTheme.spaceMd),
+              Card(
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      value: _lockEnabled,
+                      onChanged: _lockBusy ? null : _toggleLock,
+                      title: const Text('Ask to unlock on open'),
+                      subtitle: Text(
+                        'Face ID, fingerprint, or your device passcode.',
+                        style: text.labelSmall,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        TipTheme.spaceMd,
+                        0,
+                        TipTheme.spaceMd,
+                        TipTheme.spaceMd,
+                      ),
+                      child: Text(
+                        'This stops someone who picks up your unlocked phone '
+                        'from opening the wallet. It does not encrypt anything '
+                        'further: your recovery phrase is already held by the '
+                        'device keystore either way.',
+                        style: text.labelSmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
 
             const SizedBox(height: TipTheme.spaceXl),
             Text('Recovery', style: text.titleLarge),

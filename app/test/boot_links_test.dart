@@ -16,6 +16,7 @@ import 'package:tip/src/chain/network.dart';
 import 'package:tip/src/claim/claim_link.dart';
 import 'package:tip/src/links/incoming_links.dart';
 import 'package:tip/src/screens/boot_screen.dart';
+import 'package:tip/src/security/app_lock.dart';
 import 'package:tip/src/theme/theme.dart';
 import 'package:tip/src/wallet/wallet.dart';
 import 'package:tip/src/wallet/wallet_store.dart';
@@ -44,6 +45,16 @@ class _MemoryActivityStore extends ActivityStore {
 
   @override
   Future<void> write(List<ActivityEntry> next) async {}
+}
+
+/// The real one reaches for a platform channel that never answers in a widget
+/// test, and an unsettled future stalls pumpAndSettle rather than failing.
+class _NoLock extends AppLock {
+  @override
+  Future<bool> get isAvailable async => false;
+
+  @override
+  Future<bool> isEnabled() async => false;
 }
 
 class _FakeLinks extends IncomingLinks {
@@ -77,6 +88,7 @@ Future<void> _pump(
         store: store,
         activityStore: _MemoryActivityStore(),
         links: links,
+        lock: _NoLock(),
       ),
     ),
   );

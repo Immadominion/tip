@@ -20,6 +20,7 @@ import '../activity/activity_entry.dart';
 import '../chain/address.dart';
 import '../chain/amount.dart';
 import '../chain/network.dart';
+import '../security/app_lock.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet.dart';
@@ -37,12 +38,16 @@ class HomeScreen extends StatefulWidget {
     super.key,
     required this.controller,
     required this.onWalletErased,
+    this.lock,
   });
 
   final WalletController controller;
 
   /// Called when the user removes the wallet from this device.
   final VoidCallback onWalletErased;
+
+  /// Passed through to settings, where the lock is turned on and off.
+  final AppLock? lock;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -103,6 +108,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         builder: (_) => SettingsScreen(
                           wallet: _wallet,
                           onErased: widget.onWalletErased,
+                          lock: widget.lock,
                         ),
                       ),
                     ),

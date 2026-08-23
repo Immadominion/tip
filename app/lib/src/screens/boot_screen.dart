@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../activity/activity_store.dart';
 import '../links/incoming_links.dart';
+import '../security/app_lock.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet.dart';
@@ -20,9 +21,10 @@ import '../wallet/wallet_controller.dart';
 import '../wallet/wallet_store.dart';
 import 'claim_screen.dart';
 import 'home_screen.dart';
+import 'lock_screen.dart';
 import 'onboarding_screen.dart';
 
-enum _Phase { checking, onboarding, ready, failed }
+enum _Phase { checking, onboarding, locked, ready, failed }
 
 class BootScreen extends StatefulWidget {
   const BootScreen({
@@ -30,6 +32,8 @@ class BootScreen extends StatefulWidget {
     this.store,
     this.activityStore,
     this.links,
+    this.lock,
+    this.lockAfter = const Duration(seconds: 30),
   });
 
   /// Everything below is a seam for tests. The app passes nothing and lets
@@ -42,12 +46,23 @@ class BootScreen extends StatefulWidget {
   /// platform channel in a widget test buys nothing.
   final IncomingLinks? links;
 
+  final AppLock? lock;
+
+  /// How long the app can sit in the background before it locks again.
+  ///
+  /// Not zero. Authenticating backgrounds the app on some devices, and so does
+  /// switching away for two seconds to copy an address out of a message, and
+  /// re-prompting for either is the kind of friction that gets a lock turned
+  /// off entirely.
+  final Duration lockAfter;
+
   @override
   State<BootScreen> createState() => _BootScreenState();
 }
 
-class _BootScreenState extends State<BootScreen> {
+class _BootScreenState extends State<BootScreen> with WidgetsBindingObserver {
   late final WalletStore _store = widget.store ?? WalletStore();
+  late final AppLock _lock = widget.lock ?? AppLock();
 
   _Phase _phase = _Phase.checking;
   WalletController? _controller;
@@ -62,18 +77,45 @@ class _BootScreenState extends State<BootScreen> {
   bool _claimScreenOpen = false;
   StreamSubscription<Uri>? _linkSubscription;
 
+  /// When the app was last put away, for deciding whether to lock again.
+  DateTime? _leftAt;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
     _listenForLinks();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(_linkSubscription?.cancel());
     _controller?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _leftAt = DateTime.now();
+      return;
+    }
+    if (state != AppLifecycleState.resumed) return;
+
+    final left = _leftAt;
+    _leftAt = null;
+    if (left == null || _phase != _Phase.ready) return;
+    if (DateTime.now().difference(left) < widget.lockAfter) return;
+
+    unawaited(_relock());
+  }
+
+  Future<void> _relock() async {
+    if (!await _lock.isEnabled()) return;
+    if (!mounted || _phase != _Phase.ready) return;
+    setState(() => _phase = _Phase.locked);
   }
 
   void _listenForLinks() {
@@ -148,15 +190,21 @@ class _BootScreenState extends State<BootScreen> {
         });
         return;
       }
+      final controller = WalletController.forMnemonic(
+        stored,
+        activityStore: widget.activityStore,
+        walletStore: _store,
+      );
+      // The lock goes in front of an existing wallet only. A wallet created or
+      // restored in this session was just proven to belong to whoever is
+      // holding the phone.
+      final locked = await _lock.isEnabled();
+      if (!mounted) return;
       setState(() {
-        _controller = WalletController.forMnemonic(
-          stored,
-          activityStore: widget.activityStore,
-          walletStore: _store,
-        );
-        _phase = _Phase.ready;
+        _controller = controller;
+        _phase = locked ? _Phase.locked : _Phase.ready;
       });
-      _openPendingClaim();
+      if (!locked) _openPendingClaim();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -201,9 +249,17 @@ class _BootScreenState extends State<BootScreen> {
   Widget build(BuildContext context) => switch (_phase) {
         _Phase.checking => const _Splash(),
         _Phase.onboarding => OnboardingScreen(onReady: _adopt),
+        _Phase.locked => LockScreen(
+            lock: _lock,
+            onUnlocked: () {
+              setState(() => _phase = _Phase.ready);
+              _openPendingClaim();
+            },
+          ),
         _Phase.ready => HomeScreen(
             controller: _controller!,
             onWalletErased: _forget,
+            lock: _lock,
           ),
         _Phase.failed => _Failed(message: _error!, onRetry: _load),
       };
