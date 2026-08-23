@@ -13,6 +13,7 @@ import 'package:tip/src/activity/activity_store.dart';
 import 'package:tip/src/chain/amount.dart';
 import 'package:tip/src/chain/chain_client.dart';
 import 'package:tip/src/chain/network.dart';
+import 'package:tip/src/claim/claim_link.dart';
 import 'package:tip/src/screens/send_screen.dart';
 import 'package:tip/src/theme/theme.dart';
 import 'package:tip/src/wallet/wallet.dart';
@@ -149,6 +150,57 @@ void main() {
 
     expect(find.textContaining('public transfer'), findsOneWidget);
     wallet.dispose();
+  });
+
+  testWidgets('an address can be scanned as well as typed', (tester) async {
+    final wallet = await _wallet();
+    await _pump(tester, wallet);
+
+    expect(find.byTooltip('Scan'), findsOneWidget);
+    expect(find.byTooltip('Paste'), findsOneWidget);
+    wallet.dispose();
+  });
+
+  group('scanning the wrong code', () {
+    final classHash = _network.accountClassHash;
+
+    test('a tip link is named as such, not called an invalid address', () {
+      final key = ClaimLinks.create(accountClassHash: classHash);
+      final problem = scannedTipLinkProblem(
+        key.link().toString(),
+        accountClassHash: classHash,
+      );
+      expect(problem, isNotNull);
+      expect(problem, contains('tip link'));
+    });
+
+    test('the tip scheme is caught too', () {
+      final key = ClaimLinks.create(accountClassHash: classHash);
+      expect(
+        scannedTipLinkProblem(
+          'tip://claim#${key.token}',
+          accountClassHash: classHash,
+        ),
+        isNotNull,
+      );
+    });
+
+    test('a real address is not flagged', () {
+      expect(
+        scannedTipLinkProblem(
+          '0x30a7cef4289ca32268279642bfb19fcf924a8b34a919210f79920b366e1d0cc',
+          accountClassHash: classHash,
+        ),
+        isNull,
+      );
+    });
+
+    test('nonsense is left to the address validator to explain', () {
+      expect(
+        scannedTipLinkProblem('hello', accountClassHash: classHash),
+        isNull,
+      );
+    });
   });
 
   testWidgets('every token on the network can be chosen', (tester) async {

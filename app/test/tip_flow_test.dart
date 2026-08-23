@@ -174,6 +174,14 @@ void main() {
       wallet.dispose();
     });
 
+    testWidgets('a tip can be scanned instead of pasted', (tester) async {
+      final wallet = await _wallet();
+      await _pump(tester, ClaimScreen(wallet: wallet));
+
+      expect(find.byTooltip('Scan'), findsOneWidget);
+      wallet.dispose();
+    });
+
     testWidgets('a well-formed link enables the lookup', (tester) async {
       final wallet = await _wallet();
       await _pump(tester, ClaimScreen(wallet: wallet));

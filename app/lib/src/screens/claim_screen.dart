@@ -17,6 +17,7 @@ import '../claim/claim_service.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
+import 'scan_screen.dart';
 
 enum _Stage { paste, found, claiming, done }
 
@@ -72,6 +73,26 @@ class _ClaimScreenState extends State<ClaimScreen> {
     } on ClaimLinkException catch (error) {
       return error.message;
     }
+  }
+
+  /// Scans a tip code and looks it up straight away.
+  ///
+  /// Scanning is the phone-to-phone case: one person shows the code, the other
+  /// points a camera at it. Making them press a second button afterwards would
+  /// be a step with nothing in it.
+  Future<void> _scanLink() async {
+    final scanned = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const ScanScreen(
+          title: 'Scan a tip',
+          hint: 'Point the camera at the code on the other phone.',
+        ),
+      ),
+    );
+    if (scanned == null || !mounted) return;
+
+    _link.text = scanned.trim();
+    if (_linkProblem == null) await _look();
   }
 
   Future<void> _look() async {
@@ -176,13 +197,23 @@ class _ClaimScreenState extends State<ClaimScreen> {
           decoration: InputDecoration(
             hintText: 'https://$claimLinkHost$claimLinkPath#...',
             errorText: _linkProblem,
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.content_paste_rounded, size: 18),
-              tooltip: 'Paste',
-              onPressed: () async {
-                final data = await Clipboard.getData(Clipboard.kTextPlain);
-                if (data?.text != null) _link.text = data!.text!.trim();
-              },
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+                  tooltip: 'Scan',
+                  onPressed: _scanLink,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.content_paste_rounded, size: 18),
+                  tooltip: 'Paste',
+                  onPressed: () async {
+                    final data = await Clipboard.getData(Clipboard.kTextPlain);
+                    if (data?.text != null) _link.text = data!.text!.trim();
+                  },
+                ),
+              ],
             ),
           ),
         ),

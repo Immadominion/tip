@@ -54,6 +54,11 @@ dependencies:
   # the tip:// scheme, cold start and warm resume.
   app_links: ^7.2.1
 
+  # Scanning a QR. The app already produces them for addresses and tip links,
+  # and reading one is the difference between a tip working phone to phone and
+  # needing a chat app in the middle.
+  mobile_scanner: ^7.4.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -18,9 +18,11 @@ import '../chain/amount.dart';
 import '../chain/chain_client.dart';
 import '../chain/token.dart';
 import '../chain/transfer_service.dart';
+import '../claim/claim_link.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
+import 'scan_screen.dart';
 
 enum _Stage { compose, review, sending, done }
 
@@ -95,6 +97,34 @@ class _SendScreenState extends State<SendScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _scanRecipient() async {
+    final scanned = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const ScanScreen(
+          title: 'Scan an address',
+          hint: 'Point the camera at a Starknet address code.',
+        ),
+      ),
+    );
+    if (scanned == null || !mounted) return;
+
+    final value = scanned.trim();
+
+    final wrongThing = scannedTipLinkProblem(
+      value,
+      accountClassHash: widget.wallet.network.accountClassHash,
+    );
+    if (wrongThing != null) {
+      setState(() => _error = wrongThing);
+      return;
+    }
+
+    setState(() {
+      _error = null;
+      _recipient.text = value;
+    });
   }
 
   Future<void> _review() async {
@@ -239,13 +269,25 @@ class _SendScreenState extends State<SendScreen> {
           decoration: InputDecoration(
             hintText: '0x...',
             errorText: _recipientProblem,
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.content_paste_rounded, size: 18),
-              tooltip: 'Paste',
-              onPressed: () async {
-                final data = await Clipboard.getData(Clipboard.kTextPlain);
-                if (data?.text != null) _recipient.text = data!.text!.trim();
-              },
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+                  tooltip: 'Scan',
+                  onPressed: _scanRecipient,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.content_paste_rounded, size: 18),
+                  tooltip: 'Paste',
+                  onPressed: () async {
+                    final data = await Clipboard.getData(Clipboard.kTextPlain);
+                    if (data?.text != null) {
+                      _recipient.text = data!.text!.trim();
+                    }
+                  },
+                ),
+              ],
             ),
           ),
         ),
@@ -583,4 +625,21 @@ class _Spinner extends StatelessWidget {
         width: 18,
         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
       );
+}
+
+/// Whether a scanned code is a tip link that has been pointed at the wrong
+/// field, and what to say about it.
+///
+/// A tip link is a perfectly good QR code and a completely wrong thing to send
+/// to. Naming the mistake beats rejecting it as an invalid address, which is
+/// true but tells the user nothing about what they actually scanned.
+String? scannedTipLinkProblem(
+  String scanned, {
+  required Felt accountClassHash,
+}) {
+  final isClaim =
+      ClaimLinks.tryParse(scanned, accountClassHash: accountClassHash) != null;
+  if (!isClaim) return null;
+  return 'That is a tip link, not an address. Claim it from the home screen '
+      'instead.';
 }
