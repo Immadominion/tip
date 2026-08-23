@@ -7,50 +7,120 @@
 /// user sees, never a fresh start.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../activity/activity_store.dart';
+import '../links/incoming_links.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet.dart';
 import '../wallet/wallet_controller.dart';
-import '../activity/activity_store.dart';
 import '../wallet/wallet_store.dart';
+import 'claim_screen.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
 
 enum _Phase { checking, onboarding, ready, failed }
 
 class BootScreen extends StatefulWidget {
-  const BootScreen({super.key, WalletStore? store, ActivityStore? activityStore})
-      : _store = store,
-        _activityStore = activityStore;
+  const BootScreen({
+    super.key,
+    this.store,
+    this.activityStore,
+    this.links,
+  });
 
-  final WalletStore? _store;
+  /// Everything below is a seam for tests. The app passes nothing and lets
+  /// each piece make its own, which keeps the wiring in one place.
+  final WalletStore? store;
 
-  /// Only supplied by tests. In the app the controller makes its own.
-  final ActivityStore? _activityStore;
+  final ActivityStore? activityStore;
+
+  /// Left null by tests that do not care about deep links: subscribing to a
+  /// platform channel in a widget test buys nothing.
+  final IncomingLinks? links;
 
   @override
   State<BootScreen> createState() => _BootScreenState();
 }
 
 class _BootScreenState extends State<BootScreen> {
-  late final WalletStore _store = widget._store ?? WalletStore();
+  late final WalletStore _store = widget.store ?? WalletStore();
 
   _Phase _phase = _Phase.checking;
   WalletController? _controller;
   String? _error;
 
+  /// A tip link that arrived before there was a wallet to put it in.
+  ///
+  /// Someone tapping a tip link may be installing the app because of that
+  /// link. Dropping it while they set up a wallet, and making them find it
+  /// again in their messages afterwards, is the obvious way to lose them.
+  Uri? _pendingClaim;
+  bool _claimScreenOpen = false;
+  StreamSubscription<Uri>? _linkSubscription;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _listenForLinks();
   }
 
   @override
   void dispose() {
+    unawaited(_linkSubscription?.cancel());
     _controller?.dispose();
     super.dispose();
+  }
+
+  void _listenForLinks() {
+    final links = widget.links;
+    if (links == null) return;
+
+    unawaited(
+      links.initial().then((uri) {
+        if (uri != null) _receive(uri);
+      }).catchError((Object _) {
+        // No launch link, or the platform had nothing to say. Not an error.
+      }),
+    );
+    _linkSubscription = links.stream.listen(_receive, onError: (Object _) {});
+  }
+
+  void _receive(Uri uri) {
+    if (!IncomingLinks.isClaimLink(uri)) return;
+    setState(() => _pendingClaim = uri);
+    _openPendingClaim();
+  }
+
+  /// Opens the claim screen once there is a wallet to claim into.
+  void _openPendingClaim() {
+    final link = _pendingClaim;
+    if (link == null || _phase != _Phase.ready || _claimScreenOpen) return;
+
+    _claimScreenOpen = true;
+    _pendingClaim = null;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        _claimScreenOpen = false;
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ClaimScreen(
+            wallet: _controller!,
+            initialLink: link.toString(),
+          ),
+        ),
+      );
+      _claimScreenOpen = false;
+      // A second link may have arrived while the first was on screen.
+      if (mounted) _openPendingClaim();
+    });
   }
 
   Future<void> _load() async {
@@ -81,11 +151,12 @@ class _BootScreenState extends State<BootScreen> {
       setState(() {
         _controller = WalletController.forMnemonic(
           stored,
-          activityStore: widget._activityStore,
+          activityStore: widget.activityStore,
           walletStore: _store,
         );
         _phase = _Phase.ready;
       });
+      _openPendingClaim();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -105,11 +176,12 @@ class _BootScreenState extends State<BootScreen> {
     setState(() {
       _controller = WalletController.forMnemonic(
         mnemonic,
-        activityStore: widget._activityStore,
+        activityStore: widget.activityStore,
         walletStore: _store,
       );
       _phase = _Phase.ready;
     });
+    _openPendingClaim();
   }
 
   /// Returns to onboarding after the wallet has been removed.

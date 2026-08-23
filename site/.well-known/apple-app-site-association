@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["7W8969Q2S2.xyz.usetip.tip"],
+        "components": [
+          {
+            "/": "/claim*",
+            "comment": "Tip claim links open the app instead of the browser."
+          }
+        ]
+      }
+    ]
+  }
+}

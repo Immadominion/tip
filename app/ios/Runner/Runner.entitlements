@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Not wired into the Xcode target yet, on purpose.
+
+	     Turning this on requires the Associated Domains capability to be
+	     enabled for xyz.usetip.tip in the developer portal, and it requires
+	     usetip.xyz to serve site/.well-known/apple-app-site-association.
+	     Until both are true, adding CODE_SIGN_ENTITLEMENTS to the target
+	     breaks device signing, and the tip:// scheme covers the same ground
+	     with nothing to provision.
+
+	     To turn it on: add
+	       CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+	     to the Debug, Release and Profile configurations of the Runner
+	     target in ios/Runner.xcodeproj/project.pbxproj. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:usetip.xyz</string>
+	</array>
+</dict>
+</plist>

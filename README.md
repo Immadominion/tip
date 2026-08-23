@@ -1,9 +1,9 @@
 # tip
 
-A private, mobile-native wallet for Starknet, built on STRK20.
+A mobile-native wallet for Starknet, built on STRK20.
 
-Shield, unshield, and send privately, from your phone. Non-custodial. Your
-keys and your viewing key never leave your device.
+Hold, send, and tip from your phone. Non-custodial. Your keys and your viewing
+key never leave your device.
 
 ## Why
 
@@ -11,6 +11,32 @@ STRK20 ships a real privacy pool on Starknet mainnet, but the only client
 implementation is TypeScript, so today the pool is reachable from a browser
 extension or the SDK and nowhere else. tip is the consumer wallet on top of it,
 and the Dart client it needs in order to exist.
+
+## `app`
+
+The wallet. Flutter, iOS and Android.
+
+- Balances read live from the chain, with failover across several RPC
+  endpoints, because the free ones do go down mid-session
+- Send any listed token, priced before it is signed, so the fee shown is the
+  fee signed for
+- Tip links: a tip that can be sent to someone who has no wallet at all. A
+  random secret derives a throwaway Starknet account, the sender funds it, and
+  the link carries the secret. Nothing is escrowed or custodied, and the
+  recipient needs no account until they claim
+- Recovery phrase generated on device and held in the platform keystore, with
+  restore, backup, and removal
+- An activity log, also in the keystore, since Starknet's RPC cannot be asked
+  what transactions involved an address
+
+```sh
+cd app
+flutter pub get
+flutter run
+```
+
+Sepolia by default. `--dart-define=TIP_CHAIN=mainnet` for the real thing, so
+pointing at real money is deliberate rather than a default.
 
 ## Packages
 
@@ -62,11 +88,16 @@ dart test
 
 ## Status
 
-In progress during the STRK20 Private Sprint. The client library is landing
-first because the app is a thin layer over it.
+In progress during the STRK20 Private Sprint.
 
-Still to come: action compilation against the pool contract, and the Flutter app
-itself.
+The public wallet works and is checked against live Sepolia rather than against
+mocks: transfers, account deployment, and the whole tip link round trip, funded
+and then claimed into a wallet that had never touched the chain.
+
+The shielded side is built and tested but not yet reachable. STRK20 proofs are
+produced by a proving service, and no public endpoint for one is published
+anywhere. Until that resolves, the app says the shielded balance is unavailable
+rather than showing a zero it cannot vouch for.
 
 ## Stack
 

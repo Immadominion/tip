@@ -24,6 +24,29 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- tip://claim#<code>. Works with nothing hosted anywhere, which
+                 is why the app answers to it at all. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="tip"/>
+            </intent-filter>
+
+            <!-- https://usetip.xyz/claim#<code>. autoVerify only succeeds once
+                 the domain serves site/.well-known/assetlinks.json with this
+                 build's signing fingerprint. Until then the filter is simply
+                 not verified, which costs nothing. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="usetip.xyz"
+                    android:pathPrefix="/claim"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -45,6 +45,14 @@ const claimSecretBytes = 16;
 const claimLinkHost = 'usetip.xyz';
 const claimLinkPath = '/claim';
 
+/// The scheme the app registers for itself.
+///
+/// Works with nothing hosted and nothing provisioned, which makes it the form
+/// that can be relied on today. The https link is the nicer one to send a
+/// person, and it opens the app as soon as usetip.xyz serves its association
+/// files.
+const tipScheme = 'tip';
+
 class ClaimLinkException implements Exception {
   const ClaimLinkException(this.message);
 
@@ -90,6 +98,17 @@ class ClaimKey {
         scheme: 'https',
         host: host,
         path: claimLinkPath,
+        fragment: token,
+      );
+
+  /// The same claim, addressed straight to the app.
+  ///
+  /// What a QR code should carry. A camera pointed at the https link opens a
+  /// browser, and until the domain serves its association files that browser
+  /// shows a 404. This opens the app.
+  Uri appLink() => Uri(
+        scheme: tipScheme,
+        host: 'claim',
         fragment: token,
       );
 }

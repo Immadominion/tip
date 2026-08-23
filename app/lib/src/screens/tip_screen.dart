@@ -201,6 +201,10 @@ class _TipScreenState extends State<TipScreen> {
   Widget _created(ClaimIssue issue) {
     final text = Theme.of(context).textTheme;
     final link = issue.key.link().toString();
+    // The QR carries the app's own scheme rather than the https link. A camera
+    // pointed at https opens a browser, and until usetip.xyz serves its
+    // association files that browser shows a 404 instead of the tip.
+    final scannable = issue.key.appLink().toString();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -235,7 +239,7 @@ class _TipScreenState extends State<TipScreen> {
             child: Padding(
               padding: const EdgeInsets.all(TipTheme.spaceMd),
               child: AddressQr(
-                data: link,
+                data: scannable,
                 size: 200,
                 foreground: TipPalette.ink,
                 background: TipPalette.surfaceRaised,
@@ -244,6 +248,12 @@ class _TipScreenState extends State<TipScreen> {
           ),
         ),
 
+        const SizedBox(height: TipTheme.spaceSm),
+        Text(
+          'Point a camera at this if they are next to you.',
+          style: text.labelSmall,
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: TipTheme.spaceLg),
         SelectableText(
           link,

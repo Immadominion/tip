@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'links/incoming_links.dart';
 import 'screens/boot_screen.dart';
 import 'theme/theme.dart';
 
@@ -13,7 +14,7 @@ class TipApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: TipTheme.light,
       darkTheme: TipTheme.dark,
-      home: const BootScreen(),
+      home: BootScreen(links: IncomingLinks()),
     );
   }
 }

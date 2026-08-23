@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "xyz.usetip.tip",
+      "sha256_cert_fingerprints": [
+        "95:BA:33:D5:7D:40:87:5C:15:B6:73:20:C5:D4:60:C9:0A:FF:DE:FE:C2:26:98:B9:3C:4A:59:27:C5:A4:7B:26"
+      ]
+    }
+  }
+]

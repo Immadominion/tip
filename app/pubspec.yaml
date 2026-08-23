@@ -4,7 +4,7 @@ publish_to: none
 version: 0.1.0+1
 
 environment:
-  sdk: ^3.9.0
+  sdk: ^3.12.0
 
 # starknet.dart is pinned to an exact commit rather than a branch. A mutable
 # `ref: main` would let a dependency that signs transactions and handles key
@@ -49,6 +49,10 @@ dependencies:
   # The system share sheet. A tip link is meant to be handed to a person, and
   # copy-to-clipboard is a worse version of a thing every phone already does.
   share_plus: ^13.3.0
+
+  # Receiving a tip link from outside the app. Handles both the https link and
+  # the tip:// scheme, cold start and warm resume.
+  app_links: ^7.2.1
 
 dev_dependencies:
   flutter_test:
