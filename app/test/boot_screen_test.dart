@@ -7,6 +7,8 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tip/src/activity/activity_entry.dart';
+import 'package:tip/src/activity/activity_store.dart';
 import 'package:tip/src/screens/boot_screen.dart';
 import 'package:tip/src/theme/theme.dart';
 import 'package:tip/src/wallet/wallet.dart';
@@ -32,9 +34,22 @@ class _FakeStore extends WalletStore {
   }
 }
 
+class _MemoryActivityStore extends ActivityStore {
+  List<ActivityEntry> entries = const [];
+
+  @override
+  Future<List<ActivityEntry>> read() async => entries;
+
+  @override
+  Future<void> write(List<ActivityEntry> next) async => entries = next;
+}
+
 Future<void> _pump(WidgetTester tester, WalletStore store) async {
   await tester.pumpWidget(
-    MaterialApp(theme: TipTheme.light, home: BootScreen(store: store)),
+    MaterialApp(
+      theme: TipTheme.light,
+      home: BootScreen(store: store, activityStore: _MemoryActivityStore()),
+    ),
   );
   await tester.pumpAndSettle();
 }

@@ -14,8 +14,12 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:starknet/starknet.dart';
 
+import '../activity/activity_entry.dart';
+import '../chain/address.dart';
 import '../chain/amount.dart';
+import '../chain/network.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet.dart';
@@ -105,7 +109,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   const SizedBox(height: TipTheme.spaceXl),
                   Text('Activity', style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: TipTheme.spaceMd),
-                  const _EmptyActivity(),
+                  if (_wallet.activity.isEmpty)
+                    const _EmptyActivity()
+                  else
+                    Card(
+                      child: Column(
+                        children: [
+                          for (final entry in _wallet.activity)
+                            _ActivityRow(entry: entry, network: _wallet.network),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: TipTheme.spaceMd),
+                  Text(
+                    'This list is what this wallet did on this device. It is '
+                    'not a chain-wide history.',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
                 ],
               ),
             ),
@@ -547,6 +567,63 @@ class _ActionButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ActivityRow extends StatelessWidget {
+  const _ActivityRow({required this.entry, required this.network});
+
+  final ActivityEntry entry;
+  final TipNetwork network;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
+    final (icon, tint) = switch (entry.status) {
+      ActivityStatus.succeeded => (Icons.arrow_upward_rounded, TipPalette.ink),
+      ActivityStatus.reverted => (Icons.close_rounded, TipPalette.negative),
+      _ => (Icons.schedule_rounded, TipPalette.inkMuted),
+    };
+
+    final title = switch (entry.kind) {
+      ActivityKind.send => 'Sent',
+      ActivityKind.deploy => 'Account deployed',
+    };
+
+    final subtitle = switch (entry.status) {
+      ActivityStatus.reverted =>
+        'Reverted. The fee was still charged.',
+      ActivityStatus.pending => 'Waiting for the network',
+      ActivityStatus.unknown => 'Not seen by the network yet',
+      ActivityStatus.succeeded => entry.counterparty == null
+          ? _when(entry.submittedAt)
+          : 'To ${StarknetAddress.short(Felt.fromHexString(entry.counterparty!))}',
+    };
+
+    return ListTile(
+      leading: Icon(icon, size: 20, color: tint),
+      title: Text(title, style: text.titleMedium),
+      subtitle: Text(subtitle, style: text.labelSmall),
+      trailing: entry.amountLabel == null
+          ? null
+          : Text(entry.amountLabel!, style: text.titleMedium),
+      onTap: () {
+        Clipboard.setData(ClipboardData(text: entry.txHash));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Transaction hash copied')),
+        );
+      },
+    );
+  }
+}
+
+/// Rough age, which is what a person actually wants from a timestamp here.
+String _when(DateTime at) {
+  final elapsed = DateTime.now().difference(at);
+  if (elapsed.inMinutes < 1) return 'Just now';
+  if (elapsed.inHours < 1) return '${elapsed.inMinutes}m ago';
+  if (elapsed.inDays < 1) return '${elapsed.inHours}h ago';
+  return '${elapsed.inDays}d ago';
 }
 
 class _EmptyActivity extends StatelessWidget {

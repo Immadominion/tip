@@ -13,6 +13,7 @@ import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet.dart';
 import '../wallet/wallet_controller.dart';
+import '../activity/activity_store.dart';
 import '../wallet/wallet_store.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
@@ -20,9 +21,14 @@ import 'onboarding_screen.dart';
 enum _Phase { checking, onboarding, ready, failed }
 
 class BootScreen extends StatefulWidget {
-  const BootScreen({super.key, WalletStore? store}) : _store = store;
+  const BootScreen({super.key, WalletStore? store, ActivityStore? activityStore})
+      : _store = store,
+        _activityStore = activityStore;
 
   final WalletStore? _store;
+
+  /// Only supplied by tests. In the app the controller makes its own.
+  final ActivityStore? _activityStore;
 
   @override
   State<BootScreen> createState() => _BootScreenState();
@@ -73,7 +79,10 @@ class _BootScreenState extends State<BootScreen> {
         return;
       }
       setState(() {
-        _controller = WalletController.forMnemonic(stored);
+        _controller = WalletController.forMnemonic(
+          stored,
+          activityStore: widget._activityStore,
+        );
         _phase = _Phase.ready;
       });
     } catch (error) {
@@ -93,7 +102,10 @@ class _BootScreenState extends State<BootScreen> {
     await _store.writeSeedPhrase(mnemonic);
     if (!mounted) return;
     setState(() {
-      _controller = WalletController.forMnemonic(mnemonic);
+      _controller = WalletController.forMnemonic(
+        mnemonic,
+        activityStore: widget._activityStore,
+      );
       _phase = _Phase.ready;
     });
   }

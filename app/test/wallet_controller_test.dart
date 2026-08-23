@@ -7,6 +7,8 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:starknet/starknet.dart';
+import 'package:tip/src/activity/activity_entry.dart';
+import 'package:tip/src/activity/activity_store.dart';
 import 'package:tip/src/chain/amount.dart';
 import 'package:tip/src/chain/chain_client.dart';
 import 'package:tip/src/chain/network.dart';
@@ -22,11 +24,13 @@ class _StubChain extends ChainClient {
     required this.snapshot,
     this.deployed = true,
     this.failure,
+    this.outcome = TransactionOutcome.pending,
   }) : super(network: _network);
 
   BalanceSnapshot snapshot;
   bool deployed;
   Object? failure;
+  TransactionOutcome outcome;
 
   @override
   Future<BalanceSnapshot> balances(Felt address) async {
@@ -39,12 +43,39 @@ class _StubChain extends ChainClient {
     if (failure != null) throw failure!;
     return deployed;
   }
+
+  @override
+  Future<TransactionResult> transactionResult(Felt hash) async =>
+      TransactionResult(
+        outcome: outcome,
+        failureReason:
+            outcome == TransactionOutcome.reverted ? 'out of gas' : null,
+      );
 }
 
-WalletController _controller(ChainClient client) => WalletController(
+class _FakeActivityStore extends ActivityStore {
+  List<ActivityEntry> entries = const [];
+  int writeCount = 0;
+
+  @override
+  Future<List<ActivityEntry>> read() async => entries;
+
+  @override
+  Future<void> write(List<ActivityEntry> next) async {
+    writeCount++;
+    entries = next;
+  }
+}
+
+WalletController _controller(
+  ChainClient client, {
+  ActivityStore? activityStore,
+}) =>
+    WalletController(
       keys: WalletFactory(accountClassHash: _network.accountClassHash)
           .deriveFrom(WalletFactory.generateMnemonic()),
       client: client,
+      activityStore: activityStore ?? _FakeActivityStore(),
     );
 
 BalanceSnapshot _snapshot({
@@ -157,16 +188,144 @@ void main() {
     controller.dispose();
   });
 
-  test('notifies listeners around a refresh', () async {
+  group('activity', () {
+    ActivityEntry sent(String hash) => ActivityEntry.send(
+          txHash: hash,
+          amount: TokenAmount.parse('1', _strk),
+          counterparty: '0xdead',
+          submittedAt: DateTime.now(),
+        );
+
+    test('a recorded entry is kept and saved', () async {
+      final store = _FakeActivityStore();
+      final controller =
+          _controller(_StubChain(snapshot: _snapshot()), activityStore: store);
+
+      await controller.record(sent('0x1'));
+
+      expect(controller.activity.single.txHash, equals('0x1'));
+      expect(store.entries.single.txHash, equals('0x1'));
+      controller.dispose();
+    });
+
+    test('the newest entry comes first', () async {
+      final controller = _controller(_StubChain(snapshot: _snapshot()));
+      await controller.record(sent('0x1'));
+      await controller.record(sent('0x2'));
+
+      expect(
+        controller.activity.map((e) => e.txHash).toList(),
+        equals(['0x2', '0x1']),
+      );
+      controller.dispose();
+    });
+
+    test('recording the same hash twice does not duplicate it', () async {
+      final controller = _controller(_StubChain(snapshot: _snapshot()));
+      await controller.record(sent('0x1'));
+      await controller.record(sent('0x1'));
+
+      expect(controller.activity, hasLength(1));
+      controller.dispose();
+    });
+
+    test('a stored log is loaded on the first refresh', () async {
+      final store = _FakeActivityStore()..entries = [sent('0x1')];
+      final controller =
+          _controller(_StubChain(snapshot: _snapshot()), activityStore: store);
+
+      expect(controller.activity, isEmpty);
+      await controller.refresh();
+      expect(controller.activity, hasLength(1));
+      controller.dispose();
+    });
+
+    test('a pending entry that settled is updated on refresh', () async {
+      final store = _FakeActivityStore()..entries = [sent('0x1')];
+      final chain = _StubChain(
+        snapshot: _snapshot(),
+        outcome: TransactionOutcome.succeeded,
+      );
+      final controller = _controller(chain, activityStore: store);
+
+      await controller.refresh();
+
+      expect(controller.activity.single.status, equals(ActivityStatus.succeeded));
+      expect(controller.activity.single.isPending, isFalse);
+      controller.dispose();
+    });
+
+    test('a reverted entry keeps the reason it reverted', () async {
+      final store = _FakeActivityStore()..entries = [sent('0x1')];
+      final controller = _controller(
+        _StubChain(
+          snapshot: _snapshot(),
+          outcome: TransactionOutcome.reverted,
+        ),
+        activityStore: store,
+      );
+
+      await controller.refresh();
+
+      final entry = controller.activity.single;
+      expect(entry.status, equals(ActivityStatus.reverted));
+      expect(entry.failureReason, equals('out of gas'));
+      controller.dispose();
+    });
+
+    test('an entry the node has not seen stays in flight', () async {
+      final store = _FakeActivityStore()..entries = [sent('0x1')];
+      final controller = _controller(
+        _StubChain(
+          snapshot: _snapshot(),
+          outcome: TransactionOutcome.unknown,
+        ),
+        activityStore: store,
+      );
+
+      await controller.refresh();
+      expect(controller.activity.single.isPending, isTrue);
+      controller.dispose();
+    });
+
+    test('a settled log is not rewritten on every refresh', () async {
+      final store = _FakeActivityStore()..entries = [sent('0x1')];
+      final controller = _controller(
+        _StubChain(
+          snapshot: _snapshot(),
+          outcome: TransactionOutcome.succeeded,
+        ),
+        activityStore: store,
+      );
+
+      await controller.refresh();
+      final afterFirst = store.writeCount;
+      await controller.refresh();
+
+      expect(store.writeCount, equals(afterFirst));
+      controller.dispose();
+    });
+  });
+
+  test('a refresh raises and lowers the refreshing flag', () async {
+    // What a spinner depends on: a notification while the flag is up, and
+    // another once it is down.
     final controller = _controller(_StubChain(snapshot: _snapshot(strk: '1')));
-    var notifications = 0;
-    controller.addListener(() => notifications++);
+    final seen = <bool>[];
+    controller.addListener(() => seen.add(controller.isRefreshing));
 
     await controller.refresh();
 
-    // One when the refresh starts, one when it finishes, so a spinner can
-    // appear and disappear.
-    expect(notifications, equals(2));
+    expect(seen.first, isTrue);
+    expect(seen.last, isFalse);
+    expect(controller.isRefreshing, isFalse);
+    controller.dispose();
+  });
+
+  test('a refresh already in flight is not started twice', () async {
+    final controller = _controller(_StubChain(snapshot: _snapshot(strk: '1')));
+    await Future.wait([controller.refresh(), controller.refresh()]);
+    expect(controller.feeBalance.format(), equals('1'));
     controller.dispose();
   });
 }

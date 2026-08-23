@@ -36,6 +36,11 @@ class TipToken {
   String toString() => '$symbol(${address.toHexString()})';
 }
 
+/// Stands in where a token's identity is not needed, only its formatting.
+///
+/// Address one, which no real token uses.
+final placeholderTokenAddress = Felt.fromInt(1);
+
 class TipTokens {
   TipTokens._();
 

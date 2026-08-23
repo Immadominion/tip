@@ -8,7 +8,10 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:starknet/starknet.dart';
 
+import '../activity/activity_entry.dart';
+import '../activity/activity_store.dart';
 import '../chain/amount.dart';
 import '../chain/chain_client.dart';
 import '../chain/network.dart';
@@ -16,7 +19,11 @@ import '../chain/token.dart';
 import 'wallet.dart';
 
 class WalletController extends ChangeNotifier {
-  WalletController({required this.keys, required this.client});
+  WalletController({
+    required this.keys,
+    required this.client,
+    ActivityStore? activityStore,
+  }) : _activityStore = activityStore ?? ActivityStore();
 
   /// Builds a controller from a seed phrase, on the network this build points
   /// at. The account class hash comes from the network, since an address is
@@ -25,17 +32,20 @@ class WalletController extends ChangeNotifier {
   factory WalletController.forMnemonic(
     String mnemonic, {
     TipNetwork? network,
+    ActivityStore? activityStore,
   }) {
     final target = network ?? TipNetwork.current;
     return WalletController(
       keys: WalletFactory(accountClassHash: target.accountClassHash)
           .deriveFrom(mnemonic),
       client: ChainClient(network: target),
+      activityStore: activityStore,
     );
   }
 
   final WalletKeys keys;
   final ChainClient client;
+  final ActivityStore _activityStore;
 
   TipNetwork get network => client.network;
 
@@ -63,7 +73,83 @@ class WalletController extends ChangeNotifier {
   /// from "loaded, and the balance really is zero".
   bool get hasLoaded => _lastUpdated != null;
 
+  List<ActivityEntry> _activity = const [];
+
+  /// Newest first.
+  List<ActivityEntry> get activity => _activity;
+
   Timer? _timer;
+
+  bool _activityLoaded = false;
+
+  /// Loads the stored activity log. Safe to call more than once.
+  Future<void> loadActivity() async {
+    try {
+      _activity = await _activityStore.read();
+      _activityLoaded = true;
+      notifyListeners();
+    } catch (_) {
+      // A history that will not load is an inconvenience, not a reason to
+      // stop the wallet from opening.
+    }
+  }
+
+  /// Adds an entry and saves it.
+  Future<void> record(ActivityEntry entry) async {
+    _activity = [entry, ..._activity.where((e) => e.txHash != entry.txHash)];
+    notifyListeners();
+    await _save();
+  }
+
+  /// Re-checks anything still in flight and updates it.
+  ///
+  /// Runs as part of a refresh, so an entry that settled while the app was
+  /// closed stops saying "pending" as soon as the wallet is opened again.
+  Future<void> refreshPendingActivity() async {
+    final pending = _activity.where((e) => e.isPending).toList();
+    if (pending.isEmpty) return;
+
+    var changed = false;
+    for (final entry in pending) {
+      try {
+        final result = await client.transactionResult(
+          Felt.fromHexString(entry.txHash),
+        );
+        final status = switch (result.outcome) {
+          TransactionOutcome.succeeded => ActivityStatus.succeeded,
+          TransactionOutcome.reverted => ActivityStatus.reverted,
+          TransactionOutcome.pending => ActivityStatus.pending,
+          TransactionOutcome.unknown => ActivityStatus.unknown,
+        };
+        if (status == entry.status) continue;
+
+        _activity = [
+          for (final e in _activity)
+            if (e.txHash == entry.txHash)
+              e.copyWith(status: status, failureReason: result.failureReason)
+            else
+              e,
+        ];
+        changed = true;
+      } catch (_) {
+        // Leave it pending. A node that cannot answer is not a verdict.
+      }
+    }
+
+    if (changed) {
+      notifyListeners();
+      await _save();
+    }
+  }
+
+  Future<void> _save() async {
+    try {
+      await _activityStore.write(_activity);
+    } catch (_) {
+      // The entry is still in memory and on chain. Failing to cache it is not
+      // worth interrupting a send that already succeeded.
+    }
+  }
 
   TokenAmount balanceOf(TipToken token) =>
       _balances?.of(token) ?? TokenAmount.zero(token);
@@ -101,6 +187,10 @@ class WalletController extends ChangeNotifier {
       _balances = results[0] as BalanceSnapshot;
       _isDeployed = results[1] as bool;
       _lastUpdated = DateTime.now();
+      // Load before re-checking, or the first refresh looks at an empty list
+      // and everything stored stays "pending" until the one after it.
+      if (!_activityLoaded) await loadActivity();
+      await refreshPendingActivity();
     } catch (error) {
       _error = error;
     } finally {

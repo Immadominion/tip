@@ -8,6 +8,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:starknet/starknet.dart';
+import 'package:tip/src/activity/activity_entry.dart';
+import 'package:tip/src/activity/activity_store.dart';
 import 'package:tip/src/chain/amount.dart';
 import 'package:tip/src/chain/chain_client.dart';
 import 'package:tip/src/chain/network.dart';
@@ -35,11 +37,24 @@ class _StubChain extends ChainClient {
   Future<bool> isDeployed(Felt address) async => true;
 }
 
+/// The real one reaches for the platform keystore, which never answers in a
+/// widget test.
+class _MemoryActivityStore extends ActivityStore {
+  List<ActivityEntry> entries = const [];
+
+  @override
+  Future<List<ActivityEntry>> read() async => entries;
+
+  @override
+  Future<void> write(List<ActivityEntry> next) async => entries = next;
+}
+
 Future<WalletController> _wallet() async {
   final controller = WalletController(
     keys: WalletFactory(accountClassHash: _network.accountClassHash)
         .deriveFrom(WalletFactory.generateMnemonic()),
     client: _StubChain(),
+    activityStore: _MemoryActivityStore(),
   );
   await controller.refresh();
   return controller;

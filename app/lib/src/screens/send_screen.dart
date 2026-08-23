@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:starknet/starknet.dart';
 
+import '../activity/activity_entry.dart';
 import '../chain/address.dart';
 import '../chain/amount.dart';
 import '../chain/chain_client.dart';
@@ -131,6 +132,19 @@ class _SendScreenState extends State<SendScreen> {
       final hash = await _service.send(keys: widget.wallet.keys, quote: quote);
       setState(() => _hash = hash);
 
+      // Recorded on submission, not on success. A transaction that is in
+      // flight when the app is killed still happened, and a wallet that only
+      // logs confirmed sends loses exactly the ones a user most wants to look
+      // up later.
+      await widget.wallet.record(
+        ActivityEntry.send(
+          txHash: hash.toHexString(),
+          amount: quote.amount,
+          counterparty: quote.recipient.toHexString(),
+          submittedAt: DateTime.now(),
+        ),
+      );
+
       final result = await widget.wallet.client.awaitTransaction(hash);
       if (!mounted) return;
       setState(() {
@@ -154,6 +168,12 @@ class _SendScreenState extends State<SendScreen> {
     });
     try {
       final hash = await _service.deployAccount(widget.wallet.keys);
+      await widget.wallet.record(
+        ActivityEntry.deploy(
+          txHash: hash.toHexString(),
+          submittedAt: DateTime.now(),
+        ),
+      );
       final result = await widget.wallet.client.awaitTransaction(hash);
       if (!mounted) return;
       if (result.outcome == TransactionOutcome.succeeded) {
