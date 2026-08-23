@@ -1,0 +1,9 @@
+# Cloudflare Pages and Netlify read this file.
+#
+# The Apple association file has no extension, so a static host will usually
+# serve it as application/octet-stream, and Apple ignores it without saying so.
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+
+/.well-known/assetlinks.json
+  Content-Type: application/json
