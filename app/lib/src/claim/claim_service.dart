@@ -77,7 +77,8 @@ class ClaimService {
     final transferCeiling = quote.maxFee;
     if (transferCeiling == null) {
       throw const ChainException(
-        'Could not work out what a claim would cost right now',
+        'Could not work out what a tip would cost right now. The network did '
+        'not answer.',
       );
     }
     // Three times the transfer ceiling, which is a deliberate over-estimate.

@@ -110,6 +110,28 @@ void main() {
       expect(button.onPressed, isNull);
       wallet.dispose();
     });
+
+    testWidgets('a failed price offers a retry rather than dying quietly',
+        (tester) async {
+      // The stub chain cannot estimate, which is exactly the state a flaky
+      // public endpoint produces.
+      final wallet = await _wallet();
+      await _pump(tester, TipScreen(wallet: wallet));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Try again'), findsOneWidget);
+      wallet.dispose();
+    });
+
+    testWidgets('the error is one sentence, not an error inside an error',
+        (tester) async {
+      final wallet = await _wallet();
+      await _pump(tester, TipScreen(wallet: wallet));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Could not price a tip:'), findsNothing);
+      wallet.dispose();
+    });
   });
 
   group('claim screen', () {

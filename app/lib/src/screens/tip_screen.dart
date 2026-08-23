@@ -35,6 +35,7 @@ class _TipScreenState extends State<TipScreen> {
   late final ClaimService _claims = ClaimService(client: widget.wallet.client);
 
   TokenAmount? _fees;
+  bool _pricing = false;
   bool _busy = false;
   String? _error;
   ClaimIssue? _issue;
@@ -53,11 +54,20 @@ class _TipScreenState extends State<TipScreen> {
   }
 
   Future<void> _loadFees() async {
+    setState(() {
+      _pricing = true;
+      _error = null;
+    });
     try {
       final fees = await _claims.estimateClaimCost(widget.wallet.keys.signing);
       if (mounted) setState(() => _fees = fees);
     } catch (error) {
-      if (mounted) setState(() => _error = 'Could not price a tip: $error');
+      // The exception already says what went wrong. Prefixing it produces the
+      // sort of doubled sentence that makes an app look like it is reading its
+      // own stack trace out loud.
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _pricing = false);
     }
   }
 
@@ -160,7 +170,8 @@ class _TipScreenState extends State<TipScreen> {
             children: [
               _Line(
                 label: 'Fees to create and claim',
-                value: _fees?.formatWithSymbol() ?? 'working it out',
+                value: _fees?.formatWithSymbol() ??
+                    (_pricing ? 'working it out' : 'unknown'),
               ),
               _Line(
                 label: 'Total you pay',
@@ -181,6 +192,13 @@ class _TipScreenState extends State<TipScreen> {
         if (_error != null) ...[
           const SizedBox(height: TipTheme.spaceMd),
           _Warning(message: _error!, tone: TipPalette.negative),
+          const SizedBox(height: TipTheme.spaceSm),
+          // Pricing a tip is one network call, and a free endpoint dropping it
+          // should not leave the screen permanently dead.
+          OutlinedButton(
+            onPressed: _pricing ? null : _loadFees,
+            child: const Text('Try again'),
+          ),
         ],
 
         const SizedBox(height: TipTheme.spaceXl),

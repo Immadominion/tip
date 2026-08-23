@@ -162,32 +162,44 @@ class _Frame extends StatelessWidget {
   final String label;
   final Widget child;
 
+  /// A real phone's logical size, shrunk to fit several side by side. The
+  /// screen still lays out at 390x844, so anything that overflows on a phone
+  /// overflows here; only the pixels are smaller.
+  static const size = Size(390, 844);
+  static const scale = 0.52;
+
   @override
   Widget build(BuildContext context) {
-    const size = Size(390, 780);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 6, left: 4),
+          padding: const EdgeInsets.only(bottom: 4, left: 4),
           child: Text(
             label,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
               color: TipPalette.inkMuted,
             ),
           ),
         ),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: SizedBox.fromSize(
-            size: size,
-            child: MediaQuery(
-              data: MediaQueryData(size: size, devicePixelRatio: 3),
-              child: Navigator(
-                onGenerateRoute: (_) =>
-                    MaterialPageRoute<void>(builder: (_) => child),
+        SizedBox(
+          width: size.width * scale,
+          height: size.height * scale,
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: SizedBox.fromSize(
+                size: size,
+                child: MediaQuery(
+                  data: MediaQueryData(size: size, devicePixelRatio: 3),
+                  child: Navigator(
+                    onGenerateRoute: (_) =>
+                        MaterialPageRoute<void>(builder: (_) => child),
+                  ),
+                ),
               ),
             ),
           ),
