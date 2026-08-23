@@ -21,11 +21,13 @@ import 'src/chain/chain_client.dart';
 import 'src/chain/network.dart';
 import 'src/screens/claim_screen.dart';
 import 'src/screens/home_screen.dart';
+import 'src/screens/lock_screen.dart';
 import 'src/screens/onboarding_screen.dart';
 import 'src/screens/receive_screen.dart';
 import 'src/screens/send_screen.dart';
 import 'src/screens/settings_screen.dart';
 import 'src/screens/tip_screen.dart';
+import 'src/security/app_lock.dart';
 import 'src/theme/palette.dart';
 import 'src/theme/theme.dart';
 import 'src/wallet/wallet.dart';
@@ -52,6 +54,18 @@ class _GalleryChain extends ChainClient {
 
   @override
   Future<bool> isDeployed(Felt address) async => true;
+}
+
+/// Answers without touching a platform channel, so the toggle renders.
+class _GalleryLock extends AppLock {
+  @override
+  Future<bool> get isAvailable async => true;
+
+  @override
+  Future<bool> isEnabled() async => true;
+
+  @override
+  Future<bool> authenticate({String reason = ''}) async => true;
 }
 
 class _GalleryActivity extends ActivityStore {
@@ -145,7 +159,15 @@ class _Gallery extends StatelessWidget {
               _Frame(label: 'Claim', child: ClaimScreen(wallet: wallet)),
               _Frame(
                 label: 'Settings',
-                child: SettingsScreen(wallet: wallet, onErased: () {}),
+                child: SettingsScreen(
+                  wallet: wallet,
+                  onErased: () {},
+                  lock: _GalleryLock(),
+                ),
+              ),
+              _Frame(
+                label: 'Lock',
+                child: LockScreen(lock: _GalleryLock(), onUnlocked: () {}),
               ),
             ],
           ),

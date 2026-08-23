@@ -139,6 +139,25 @@ void main() {
       expect(lock.prompts, equals(1), reason: 'should prompt without a tap');
     });
 
+    testWidgets('the lock badge keeps its size instead of stretching',
+        (tester) async {
+      // A stretching column turned this into a violet band across the screen.
+      await _boot(
+        tester,
+        store: _FakeStore(stored: WalletFactory.generateMnemonic()),
+        lock: _FakeLock(enabled: true, willSucceed: false),
+      );
+
+      final badge = tester.getSize(
+        find.ancestor(
+          of: find.byIcon(Icons.lock_outline),
+          matching: find.byType(Container),
+        ).first,
+      );
+      expect(badge.width, equals(56));
+      expect(badge.height, equals(56));
+    });
+
     testWidgets('a refusal leaves a way to try again, not a dead end',
         (tester) async {
       final lock = _FakeLock(enabled: true, willSucceed: false);

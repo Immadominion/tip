@@ -63,18 +63,24 @@ class _LockScreenState extends State<LockScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    gradient: TipPalette.actionGradient,
-                    borderRadius: BorderRadius.circular(TipTheme.radiusMedium),
-                  ),
-                  child: const Icon(
-                    Icons.lock_outline,
-                    color: Colors.white,
-                    size: 26,
+                // Centered rather than bare: the column stretches its
+                // children to full width, which turns a 56 point badge into a
+                // violet band across the screen.
+                Center(
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      gradient: TipPalette.actionGradient,
+                      borderRadius:
+                          BorderRadius.circular(TipTheme.radiusMedium),
+                    ),
+                    child: const Icon(
+                      Icons.lock_outline,
+                      color: Colors.white,
+                      size: 26,
+                    ),
                   ),
                 ),
                 const SizedBox(height: TipTheme.spaceLg),
