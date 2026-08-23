@@ -13,27 +13,39 @@ import 'package:flutter/services.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet.dart';
-import '../wallet/wallet_controller.dart';
-import 'home_screen.dart';
-
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  const OnboardingScreen({super.key, required this.onReady});
+
+  /// Called with a phrase the user has created and confirmed, or restored.
+  /// Whoever supplies this is responsible for saving it before the wallet is
+  /// shown.
+  final Future<void> Function(String mnemonic) onReady;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-enum _Step { welcome, showPhrase, confirmPhrase }
+enum _Step { welcome, showPhrase, confirmPhrase, restore }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   _Step _step = _Step.welcome;
   String? _mnemonic;
+  bool _saving = false;
 
   void _createWallet() {
     setState(() {
       _mnemonic = WalletFactory.generateMnemonic();
       _step = _Step.showPhrase;
     });
+  }
+
+  Future<void> _finish(String mnemonic) async {
+    setState(() => _saving = true);
+    try {
+      await widget.onReady(mnemonic);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -45,7 +57,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 240),
             child: switch (_step) {
-              _Step.welcome => _Welcome(onCreate: _createWallet),
+              _Step.welcome => _Welcome(
+                onCreate: _createWallet,
+                onRestore: () => setState(() => _step = _Step.restore),
+              ),
+              _Step.restore => _Restore(
+                busy: _saving,
+                onBack: () => setState(() => _step = _Step.welcome),
+                onRestore: _finish,
+              ),
               _Step.showPhrase => _ShowPhrase(
                 mnemonic: _mnemonic!,
                 onContinue: () => setState(() => _step = _Step.confirmPhrase),
@@ -53,13 +73,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               _Step.confirmPhrase => _ConfirmPhrase(
                 mnemonic: _mnemonic!,
                 onBack: () => setState(() => _step = _Step.showPhrase),
-                onConfirmed: () => Navigator.of(context).pushReplacement(
-                  MaterialPageRoute<void>(
-                    builder: (_) => HomeScreen(
-                      controller: WalletController.forMnemonic(_mnemonic!),
-                    ),
-                  ),
-                ),
+                busy: _saving,
+                onConfirmed: () => _finish(_mnemonic!),
               ),
             },
           ),
@@ -70,9 +85,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 }
 
 class _Welcome extends StatelessWidget {
-  const _Welcome({required this.onCreate});
+  const _Welcome({required this.onCreate, required this.onRestore});
 
   final VoidCallback onCreate;
+  final VoidCallback onRestore;
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +119,7 @@ class _Welcome extends StatelessWidget {
           ),
           const SizedBox(height: TipTheme.spaceSm),
           OutlinedButton(
-            onPressed: null,
+            onPressed: onRestore,
             child: const Text('I already have a phrase'),
           ),
           const SizedBox(height: TipTheme.spaceMd),
@@ -222,11 +238,15 @@ class _ConfirmPhrase extends StatefulWidget {
     required this.mnemonic,
     required this.onBack,
     required this.onConfirmed,
+    required this.busy,
   });
 
   final String mnemonic;
   final VoidCallback onBack;
   final VoidCallback onConfirmed;
+
+  /// True while the phrase is being written to the keystore.
+  final bool busy;
 
   @override
   State<_ConfirmPhrase> createState() => _ConfirmPhraseState();
@@ -305,12 +325,133 @@ class _ConfirmPhraseState extends State<_ConfirmPhrase> {
               style: text.bodyMedium?.copyWith(color: TipPalette.negative),
             ),
           const Spacer(),
-          FilledButton(onPressed: _check, child: const Text('Confirm')),
+          FilledButton(
+            onPressed: widget.busy ? null : _check,
+            child: widget.busy
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Confirm'),
+          ),
           const SizedBox(height: TipTheme.spaceSm),
           TextButton(
-            onPressed: widget.onBack,
+            onPressed: widget.busy ? null : widget.onBack,
             child: const Text('Show me the phrase again'),
           ),
+          const SizedBox(height: TipTheme.spaceMd),
+        ],
+      ),
+    );
+  }
+}
+
+/// Restoring a wallet from a phrase the user already has.
+///
+/// The checksum is the whole point of this screen. A BIP39 phrase with one
+/// mistyped word still derives a valid, empty wallet, so without the check the
+/// user is shown a working wallet with none of their money in it and no
+/// explanation. Checking here turns that into a typo they can fix.
+class _Restore extends StatefulWidget {
+  const _Restore({
+    required this.onBack,
+    required this.onRestore,
+    required this.busy,
+  });
+
+  final VoidCallback onBack;
+  final Future<void> Function(String mnemonic) onRestore;
+  final bool busy;
+
+  @override
+  State<_Restore> createState() => _RestoreState();
+}
+
+class _RestoreState extends State<_Restore> {
+  final _phrase = TextEditingController();
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _phrase.addListener(() => setState(() => _error = null));
+  }
+
+  @override
+  void dispose() {
+    _phrase.dispose();
+    super.dispose();
+  }
+
+  /// Whitespace and case are the user's problem to make, not to fix.
+  String get _normalised =>
+      _phrase.text.trim().toLowerCase().split(RegExp(r'\s+')).join(' ');
+
+  int get _wordCount => _normalised.isEmpty ? 0 : _normalised.split(' ').length;
+
+  void _submit() {
+    if (!WalletFactory.isValidMnemonic(_normalised)) {
+      setState(() {
+        _error = _wordCount == 12 || _wordCount == 24
+            ? 'That phrase does not check out. One of the words is probably '
+                'misspelled or in the wrong place.'
+            : 'A recovery phrase is 12 or 24 words. This one has $_wordCount.';
+      });
+      return;
+    }
+    widget.onRestore(_normalised);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
+    return Padding(
+      padding: const EdgeInsets.all(TipTheme.spaceLg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: TipTheme.spaceMd),
+          Text('Restore a wallet', style: text.headlineMedium),
+          const SizedBox(height: TipTheme.spaceSm),
+          Text(
+            'Type or paste your recovery phrase. The words go in the order '
+            'you wrote them down.',
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: TipTheme.spaceLg),
+          TextField(
+            controller: _phrase,
+            maxLines: 4,
+            autocorrect: false,
+            enableSuggestions: false,
+            textCapitalization: TextCapitalization.none,
+            decoration: InputDecoration(
+              hintText: 'abandon ability able ...',
+              errorText: _error,
+              helperText: _wordCount == 0 ? null : '$_wordCount words',
+            ),
+          ),
+          const Spacer(),
+          FilledButton(
+            onPressed: _wordCount == 0 || widget.busy ? null : _submit,
+            child: widget.busy
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Restore wallet'),
+          ),
+          const SizedBox(height: TipTheme.spaceSm),
+          TextButton(onPressed: widget.busy ? null : widget.onBack, child: const Text('Back')),
           const SizedBox(height: TipTheme.spaceMd),
         ],
       ),

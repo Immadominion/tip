@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'screens/onboarding_screen.dart';
+import 'screens/boot_screen.dart';
 import 'theme/theme.dart';
 
 class TipApp extends StatelessWidget {
@@ -13,7 +13,7 @@ class TipApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: TipTheme.light,
       darkTheme: TipTheme.dark,
-      home: const OnboardingScreen(),
+      home: const BootScreen(),
     );
   }
 }
