@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet.dart';
+import '../wallet/wallet_controller.dart';
 import 'home_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -54,7 +55,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 onBack: () => setState(() => _step = _Step.showPhrase),
                 onConfirmed: () => Navigator.of(context).pushReplacement(
                   MaterialPageRoute<void>(
-                    builder: (_) => HomeScreen(mnemonic: _mnemonic!),
+                    builder: (_) => HomeScreen(
+                      controller: WalletController.forMnemonic(_mnemonic!),
+                    ),
                   ),
                 ),
               ),

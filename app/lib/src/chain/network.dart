@@ -19,6 +19,7 @@ class TipNetwork {
     required this.chainId,
     required this.explorerBase,
     required this.tokens,
+    required this.accountClassHash,
     this.poolAddress,
   });
 
@@ -48,6 +49,13 @@ class TipNetwork {
 
   /// Tokens the wallet shows by default.
   final List<TipToken> tokens;
+
+  /// Class of the account contract deployed for a new wallet.
+  ///
+  /// OpenZeppelin's, and confirmed declared on both chains: an address is
+  /// computed from this hash before deployment, so a hash that is not declared
+  /// gives the user an address they can be paid at and can never spend from.
+  final Felt accountClassHash;
 
   /// The STRK20 privacy pool, when one is deployed on this chain.
   ///
@@ -80,6 +88,7 @@ class TipNetwork {
     chainId: _snMain,
     explorerBase: 'https://voyager.online',
     tokens: TipTokens.mainnet,
+    accountClassHash: _openZeppelinAccount,
   );
 
   static final sepolia = TipNetwork(
@@ -89,11 +98,23 @@ class TipNetwork {
     chainId: _snSepolia,
     explorerBase: 'https://sepolia.voyager.online',
     tokens: TipTokens.sepolia,
+    accountClassHash: _openZeppelinAccount,
     poolAddress: _sepoliaPool,
   );
 
   static TipNetwork of(TipChain chain) =>
       chain == TipChain.mainnet ? mainnet : sepolia;
+
+  /// The chain this build points at.
+  ///
+  /// Sepolia by default so that a mistake during development costs nothing.
+  /// A mainnet build is `flutter run --dart-define=TIP_CHAIN=mainnet`, which
+  /// makes pointing at real money a deliberate act rather than a default.
+  static TipNetwork get current =>
+      const String.fromEnvironment('TIP_CHAIN', defaultValue: 'sepolia') ==
+              'mainnet'
+          ? mainnet
+          : sepolia;
 }
 
 /// Endpoints confirmed by hand to answer `starknet_call`, in preference order.
@@ -119,6 +140,11 @@ final _sepoliaRpcs = [
 /// `SN_MAIN` and `SN_SEPOLIA` as ASCII short strings.
 final _snMain = Felt.fromHexString('0x534e5f4d41494e');
 final _snSepolia = Felt.fromHexString('0x534e5f5345504f4c4941');
+
+/// OpenZeppelin's account, declared on mainnet and Sepolia alike.
+final _openZeppelinAccount = Felt.fromHexString(
+  '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f',
+);
 
 /// Confirmed live: version 2.0, deposit fee 2 STRK.
 final _sepoliaPool = Felt.fromHexString(

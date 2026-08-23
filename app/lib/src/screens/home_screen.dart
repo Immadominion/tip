@@ -6,99 +6,311 @@
 /// not entering a special mode, they are just choosing which of their two
 /// balances they are looking at.
 ///
-/// Balances and activity here are placeholders until the pool's index
-/// bookkeeping lands. Everything that is real (the address, the keys) comes
-/// from the actual derivation.
+/// The public side reads real balances from the chain. The shielded side says
+/// it is not available yet rather than showing a confident zero, because a
+/// wallet that reports nothing when it means it cannot see is a wallet that
+/// will one day report nothing when the money is gone.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:starknet/starknet.dart';
 
+import '../chain/amount.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet.dart';
+import '../wallet/wallet_controller.dart';
 import 'receive_screen.dart';
 import 'send_screen.dart';
-
-/// Placeholder until the account contract is chosen and deployed.
-/// STRK fee token. The same address on mainnet, sepolia, and devnet, per the
-/// pool's own constants.
-final strkTokenAddress = BigInt.parse(
-  '04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
-  radix: 16,
-);
-
-final _accountClassHash = Felt.fromHexString(
-  '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f',
-);
 
 enum BalanceView { public, private }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.mnemonic});
+  const HomeScreen({super.key, required this.controller});
 
-  final String mnemonic;
+  final WalletController controller;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  BalanceView _view = BalanceView.private;
-  late final WalletKeys _keys;
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  BalanceView _view = BalanceView.public;
+
+  WalletController get _wallet => widget.controller;
 
   @override
   void initState() {
     super.initState();
-    _keys = WalletFactory(
-      accountClassHash: _accountClassHash,
-    ).deriveFrom(widget.mnemonic);
+    WidgetsBinding.instance.addObserver(this);
+    _wallet.startPolling();
   }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _wallet.stopPolling();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Polling a public endpoint from a backgrounded app is rate limit spent on
+    // nobody. Coming back to a stale balance is worse, so it refreshes on the
+    // way in rather than continuing to poll on the way out.
+    if (state == AppLifecycleState.resumed) {
+      _wallet.startPolling();
+    } else if (state == AppLifecycleState.paused) {
+      _wallet.stopPolling();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: DecoratedBox(
+        decoration: const BoxDecoration(gradient: TipPalette.heroGradient),
+        child: SafeArea(
+          child: ListenableBuilder(
+            listenable: _wallet,
+            builder: (context, _) => RefreshIndicator(
+              color: TipPalette.accent,
+              onRefresh: _wallet.refresh,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(TipTheme.spaceLg),
+                children: [
+                  if (!_wallet.network.isMainnet)
+                    _NetworkBanner(label: _wallet.network.label),
+                  _AccountRow(keys: _wallet.keys),
+                  const SizedBox(height: TipTheme.spaceXl),
+                  Center(
+                    child: _BalanceToggle(
+                      value: _view,
+                      onChanged: (v) => setState(() => _view = v),
+                    ),
+                  ),
+                  const SizedBox(height: TipTheme.spaceLg),
+                  _Hero(view: _view, wallet: _wallet),
+                  const SizedBox(height: TipTheme.spaceXl),
+                  _Actions(wallet: _wallet),
+                  if (_wallet.hasLoaded && !_wallet.isDeployed) ...[
+                    const SizedBox(height: TipTheme.spaceMd),
+                    const _NotDeployedNote(),
+                  ],
+                  if (_view == BalanceView.public) ...[
+                    const SizedBox(height: TipTheme.spaceXl),
+                    _Assets(wallet: _wallet),
+                  ],
+                  const SizedBox(height: TipTheme.spaceXl),
+                  Text('Activity', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: TipTheme.spaceMd),
+                  const _EmptyActivity(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Says loudly which chain this is, whenever it is not the real one.
+class _NetworkBanner extends StatelessWidget {
+  const _NetworkBanner({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: TipTheme.spaceMd),
+      padding: const EdgeInsets.symmetric(
+        horizontal: TipTheme.spaceMd,
+        vertical: TipTheme.spaceSm,
+      ),
+      decoration: BoxDecoration(
+        color: TipPalette.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(TipTheme.radiusPill),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.science_outlined, size: 14, color: TipPalette.warning),
+          const SizedBox(width: TipTheme.spaceXs + 2),
+          Text(
+            '$label. These are not real funds.',
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(color: TipPalette.warning),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Hero extends StatelessWidget {
+  const _Hero({required this.view, required this.wallet});
+
+  final BalanceView view;
+  final WalletController wallet;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
 
-    return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(gradient: TipPalette.heroGradient),
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(TipTheme.spaceLg),
+    if (view == BalanceView.private) {
+      return Column(
+        children: [
+          Text('Not available yet', style: text.titleLarge),
+          const SizedBox(height: TipTheme.spaceXs),
+          Text(
+            'Reading a shielded balance needs the pool. Until then this says '
+            'nothing rather than showing you a zero it cannot vouch for.',
+            style: text.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
+    }
+
+    if (!wallet.hasLoaded) {
+      return Column(
+        children: [
+          Text('...', style: text.displayLarge),
+          const SizedBox(height: TipTheme.spaceXs),
+          Text('Reading the chain', style: text.bodyMedium),
+        ],
+      );
+    }
+
+    final fee = wallet.feeBalance;
+    final failed = wallet.error != null ||
+        (wallet.balances?.failures.containsKey(fee.token) ?? false);
+
+    return Column(
+      children: [
+        Text(fee.format(), style: text.displayLarge),
+        const SizedBox(height: TipTheme.spaceXs),
+        Text(
+          failed
+              ? 'Could not reach the chain. Pull to retry.'
+              : '${fee.token.symbol}. Public, and visible to anyone.',
+          style: text.bodyMedium?.copyWith(
+            color: failed ? TipPalette.negative : null,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+/// The account contract does not exist until the first transaction deploys it.
+class _NotDeployedNote extends StatelessWidget {
+  const _NotDeployedNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(TipTheme.spaceMd),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.info_outline, size: 18, color: TipPalette.inkMuted),
+            const SizedBox(width: TipTheme.spaceSm + 2),
+            Expanded(
+              child: Text(
+                'This address can receive right away. Sending needs the account '
+                'deployed first, which happens on your first transaction and '
+                'costs a small fee in STRK.',
+                style: text.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Assets extends StatelessWidget {
+  const _Assets({required this.wallet});
+
+  final WalletController wallet;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Assets', style: text.titleLarge),
+        const SizedBox(height: TipTheme.spaceMd),
+        Card(
+          child: Column(
             children: [
-              _AccountRow(keys: _keys),
-              const SizedBox(height: TipTheme.spaceXl),
-              Center(
-                child: _BalanceToggle(
-                  value: _view,
-                  onChanged: (v) => setState(() => _view = v),
+              for (final amount in wallet.visibleBalances)
+                _AssetRow(
+                  amount: amount,
+                  unreadable:
+                      wallet.balances?.failures.containsKey(amount.token) ??
+                          false,
                 ),
-              ),
-              const SizedBox(height: TipTheme.spaceLg),
-              Center(
-                child: Column(
-                  children: [
-                    Text('\$0.00', style: text.displayLarge),
-                    const SizedBox(height: TipTheme.spaceXs),
-                    Text(
-                      _view == BalanceView.private
-                          ? 'Shielded. Visible only to you.'
-                          : 'Public. Visible to anyone.',
-                      style: text.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: TipTheme.spaceXl),
-              _Actions(keys: _keys),
-              const SizedBox(height: TipTheme.spaceXl),
-              Text('Activity', style: text.titleLarge),
-              const SizedBox(height: TipTheme.spaceMd),
-              const _EmptyActivity(),
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _AssetRow extends StatelessWidget {
+  const _AssetRow({required this.amount, required this.unreadable});
+
+  final TokenAmount amount;
+  final bool unreadable;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: TipTheme.spaceMd,
+        vertical: TipTheme.spaceSm + 4,
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: TipPalette.accentWash,
+            child: Text(
+              amount.token.symbol.characters.first,
+              style: text.labelSmall?.copyWith(color: TipPalette.accentDeep),
+            ),
+          ),
+          const SizedBox(width: TipTheme.spaceSm + 4),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(amount.token.symbol, style: text.titleMedium),
+                Text(amount.token.name, style: text.labelSmall),
+              ],
+            ),
+          ),
+          Text(
+            unreadable ? 'unreadable' : amount.format(),
+            style: text.titleMedium?.copyWith(
+              color: unreadable ? TipPalette.negative : null,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -249,9 +461,9 @@ class _ToggleOption extends StatelessWidget {
 }
 
 class _Actions extends StatelessWidget {
-  const _Actions({required this.keys});
+  const _Actions({required this.wallet});
 
-  final WalletKeys keys;
+  final WalletController wallet;
 
   @override
   Widget build(BuildContext context) {
@@ -264,12 +476,12 @@ class _Actions extends StatelessWidget {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => SendScreen(
-                  keys: keys,
+                  keys: wallet.keys,
                   // Empty until discovery runs against real pool state. The
                   // screen handles this honestly: it reports that there is
                   // nothing to spend rather than pretending otherwise.
                   notes: const [],
-                  token: strkTokenAddress,
+                  token: wallet.network.feeToken.address.toBigInt(),
                 ),
               ),
             ),
@@ -282,8 +494,9 @@ class _Actions extends StatelessWidget {
             label: 'Receive',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) =>
-                    ReceiveScreen(address: keys.accountAddress.toHexString()),
+                builder: (_) => ReceiveScreen(
+                  address: wallet.keys.accountAddress.toHexString(),
+                ),
               ),
             ),
           ),
@@ -363,7 +576,7 @@ class _EmptyActivity extends StatelessWidget {
             Text('Nothing here yet', style: text.titleMedium),
             const SizedBox(height: TipTheme.spaceXs),
             Text(
-              'Shield some funds to start sending privately.',
+              'Transfers you make from this wallet will show up here.',
               style: text.bodyMedium,
               textAlign: TextAlign.center,
             ),

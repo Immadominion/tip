@@ -17,12 +17,13 @@ import 'package:tip/src/chain/network.dart';
 Future<List<String>> _call(
   List<Uri> endpoints,
   Felt contract,
-  String selector,
-) async {
+  String selector, {
+  String method = 'starknet_call',
+}) async {
   Object? lastError;
   for (final endpoint in endpoints) {
     try {
-      return await _callOne(endpoint, contract, selector);
+      return await _callOne(endpoint, contract, selector, method: method);
     } catch (error) {
       lastError = error;
     }
@@ -30,7 +31,12 @@ Future<List<String>> _call(
   throw StateError('every endpoint failed: $lastError');
 }
 
-Future<List<String>> _callOne(Uri rpc, Felt contract, String selector) async {
+Future<List<String>> _callOne(
+  Uri rpc,
+  Felt contract,
+  String selector, {
+  String method = 'starknet_call',
+}) async {
   final client = HttpClient();
   try {
     final request = await client.postUrl(rpc);
@@ -39,15 +45,18 @@ Future<List<String>> _callOne(Uri rpc, Felt contract, String selector) async {
       jsonEncode({
         'jsonrpc': '2.0',
         'id': 1,
-        'method': 'starknet_call',
-        'params': [
-          {
-            'contract_address': contract.toHexString(),
-            'entry_point_selector': getSelectorByName(selector).toHexString(),
-            'calldata': <String>[],
-          },
-          'latest',
-        ],
+        'method': method,
+        'params': method == 'starknet_getClass'
+            ? ['latest', contract.toHexString()]
+            : [
+                {
+                  'contract_address': contract.toHexString(),
+                  'entry_point_selector':
+                      getSelectorByName(selector).toHexString(),
+                  'calldata': <String>[],
+                },
+                'latest',
+              ],
       }),
     );
     final response = await request.close();
@@ -56,7 +65,9 @@ Future<List<String>> _callOne(Uri rpc, Felt contract, String selector) async {
     if (body.containsKey('error')) {
       throw StateError('$selector: ${jsonEncode(body['error'])}');
     }
-    return (body['result'] as List).cast<String>();
+    final result = body['result'];
+    if (result is! List) return const ['0x1'];
+    return result.cast<String>();
   } finally {
     client.close();
   }
@@ -129,6 +140,19 @@ Future<void> main() async {
         failures++;
         stdout.writeln('  FAIL  ${token.symbol.padRight(6)} $error');
       }
+    }
+
+    try {
+      await _call(
+        network.rpcUrls,
+        network.accountClassHash,
+        'nothing',
+        method: 'starknet_getClass',
+      );
+      stdout.writeln('  ok    account class declared');
+    } catch (error) {
+      failures++;
+      stdout.writeln('  FAIL  account class $error');
     }
 
     final pool = network.poolAddress;
