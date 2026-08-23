@@ -9,6 +9,7 @@ library;
 
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:starknet/starknet.dart';
+import '../chain/signing_account.dart';
 import 'package:tip_privacy/tip_privacy.dart';
 
 /// A wallet's derived key material, held in memory for the session.
@@ -30,6 +31,13 @@ class WalletKeys {
 
   /// The STRK20 viewing key, derived from the same seed.
   final BigInt viewingKey;
+
+  /// What the transfer layer needs, and nothing more.
+  SigningAccount get signing => SigningAccount(
+        privateKey: accountPrivateKey,
+        publicKey: accountPublicKey,
+        address: accountAddress,
+      );
 
   /// The address, shortened for display.
   String get shortAddress {

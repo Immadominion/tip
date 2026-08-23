@@ -86,7 +86,7 @@ class _SendScreenState extends State<SendScreen> {
     setState(() => _busy = true);
     try {
       final max = await _service.maxSendable(
-        keys: widget.wallet.keys,
+        from: widget.wallet.keys.signing,
         token: _token,
       );
       _amount.text = max.formatExact();
@@ -104,7 +104,7 @@ class _SendScreenState extends State<SendScreen> {
     });
     try {
       final quote = await _service.quote(
-        keys: widget.wallet.keys,
+        from: widget.wallet.keys.signing,
         token: _token,
         recipient: StarknetAddress.parse(_recipient.text),
         amount: TokenAmount.parse(_amount.text, _token),
@@ -129,7 +129,7 @@ class _SendScreenState extends State<SendScreen> {
       _error = null;
     });
     try {
-      final hash = await _service.send(keys: widget.wallet.keys, quote: quote);
+      final hash = await _service.send(from: widget.wallet.keys.signing, quote: quote);
       setState(() => _hash = hash);
 
       // Recorded on submission, not on success. A transaction that is in
@@ -167,7 +167,7 @@ class _SendScreenState extends State<SendScreen> {
       _error = null;
     });
     try {
-      final hash = await _service.deployAccount(widget.wallet.keys);
+      final hash = await _service.deployAccount(widget.wallet.keys.signing);
       await widget.wallet.record(
         ActivityEntry.deploy(
           txHash: hash.toHexString(),

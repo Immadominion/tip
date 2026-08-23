@@ -10,10 +10,10 @@ library;
 import 'package:starknet/starknet.dart';
 import 'package:starknet_provider/starknet_provider.dart';
 
-import '../wallet/wallet.dart';
 import 'amount.dart';
 import 'chain_client.dart';
 import 'fee_bounds.dart';
+import 'signing_account.dart';
 import 'token.dart';
 
 /// A priced transfer, and everything standing in its way.
@@ -67,7 +67,7 @@ class TransferService {
 
   /// Prices a transfer and checks it, without signing anything.
   Future<TransferQuote> quote({
-    required WalletKeys keys,
+    required SigningAccount from,
     required TipToken token,
     required Felt recipient,
     required TokenAmount amount,
@@ -78,7 +78,7 @@ class TransferService {
       blockers.add('Enter an amount above zero');
     }
 
-    final deployed = await client.isDeployed(keys.accountAddress);
+    final deployed = await client.isDeployed(from.address);
     if (!deployed) {
       return TransferQuote(
         token: token,
@@ -93,7 +93,7 @@ class TransferService {
 
     final balance = await client.balanceOf(
       token: token,
-      address: keys.accountAddress,
+      address: from.address,
     );
     if (amount > balance) {
       blockers.add(
@@ -110,7 +110,7 @@ class TransferService {
     if (blockers.isEmpty) {
       try {
         bounds = FeeBounds.from(
-          await client.accountFor(keys).getEstimateMaxFeeForInvokeTx(
+          await client.accountFor(from).getEstimateMaxFeeForInvokeTx(
                 functionCalls: [_transferCall(token, recipient, amount)],
               ),
         );
@@ -126,7 +126,7 @@ class TransferService {
           ? balance
           : await client.balanceOf(
               token: _feeToken,
-              address: keys.accountAddress,
+              address: from.address,
             );
 
       // When the token being sent is also the fee token, the amount and the
@@ -167,13 +167,22 @@ class TransferService {
   }
 
   /// The largest amount of [token] that can actually be sent right now.
+  ///
+  /// [recipient] matters more than it looks. Paying an address that already
+  /// holds the token updates a storage slot; paying one that does not creates
+  /// it, and the second costs more gas. Pricing against the sender's own
+  /// address, which certainly holds a balance, produces a maximum that is
+  /// too large to actually send. When the recipient is not known yet, this
+  /// prices against an address that holds nothing, which is the expensive
+  /// case and therefore the safe one.
   Future<TokenAmount> maxSendable({
-    required WalletKeys keys,
+    required SigningAccount from,
     required TipToken token,
+    Felt? recipient,
   }) async {
     final balance = await client.balanceOf(
       token: token,
-      address: keys.accountAddress,
+      address: from.address,
     );
     if (token != _feeToken || balance.isZero) return balance;
 
@@ -182,9 +191,9 @@ class TransferService {
     // fine: the fee for an ERC-20 transfer does not depend on the amount.
     try {
       final bounds = FeeBounds.from(
-        await client.accountFor(keys).getEstimateMaxFeeForInvokeTx(
+        await client.accountFor(from).getEstimateMaxFeeForInvokeTx(
               functionCalls: [
-                _transferCall(token, keys.accountAddress, balance),
+                _transferCall(token, recipient ?? coldAddress, balance),
               ],
             ),
       );
@@ -205,19 +214,45 @@ class TransferService {
   /// The account pays its own deployment fee, so the address has to hold STRK
   /// already. It can, because the address is derivable and payable before the
   /// contract exists.
-  Future<Felt> deployAccount(WalletKeys keys) async {
+  ///
+  /// The bounds are estimated here and margined rather than left to the SDK.
+  /// Left to itself, `deployAccount` auto-estimates only when all six bounds
+  /// are zero and then signs for exactly the estimate. Validation runs for
+  /// real and costs slightly more, and the transaction comes back as
+  /// VALIDATION_FAILURE with nothing useful to say about why. A claim account
+  /// funded to the penny fails on this every time.
+  Future<Felt> deployAccount(SigningAccount from) async {
+    final signer = StarkAccountSigner(
+      signer: StarkSigner(privateKey: from.privateKey),
+    );
+
+    final bounds = FeeBounds.from(
+      await client.accountFor(from).getEstimateMaxFeeForDeployAccountTx(
+            constructorCalldata: [from.publicKey],
+            classHash: client.network.accountClassHash,
+            contractAddressSalt: from.publicKey,
+            contractAddress: from.address,
+            accountSigner: signer,
+            provider: client.submissionProvider,
+          ),
+    );
+
     final response = await Account.deployAccount(
-      accountSigner: StarkAccountSigner(
-        signer: StarkSigner(privateKey: keys.accountPrivateKey),
-      ),
+      accountSigner: signer,
       provider: client.submissionProvider,
-      constructorCalldata: [keys.accountPublicKey],
+      constructorCalldata: [from.publicKey],
       classHash: client.network.accountClassHash,
-      contractAddressSalt: keys.accountPublicKey,
-      // Passing the address is what makes the SDK's own fee estimate run
-      // against this account rather than against address zero, which fails
-      // validation with nothing useful to say about why.
-      contractAddress: keys.accountAddress,
+      contractAddressSalt: from.publicKey,
+      // Passing the address is what makes an estimate run against this account
+      // rather than against address zero, which fails validation with nothing
+      // useful to say about why.
+      contractAddress: from.address,
+      l1GasConsumed: bounds.l1GasConsumed,
+      l1GasPrice: bounds.l1GasPrice,
+      l1DataGasConsumed: bounds.l1DataGasConsumed,
+      l1DataGasPrice: bounds.l1DataGasPrice,
+      l2GasConsumed: bounds.l2GasConsumed,
+      l2GasPrice: bounds.l2GasPrice,
     );
 
     return response.when(
@@ -229,9 +264,26 @@ class TransferService {
     );
   }
 
+  /// What deploying an account will cost, at the ceiling.
+  Future<TokenAmount> deploymentCeiling(SigningAccount from) async {
+    final bounds = FeeBounds.from(
+      await client.accountFor(from).getEstimateMaxFeeForDeployAccountTx(
+            constructorCalldata: [from.publicKey],
+            classHash: client.network.accountClassHash,
+            contractAddressSalt: from.publicKey,
+            contractAddress: from.address,
+            accountSigner: StarkAccountSigner(
+              signer: StarkSigner(privateKey: from.privateKey),
+            ),
+            provider: client.submissionProvider,
+          ),
+    );
+    return TokenAmount(bounds.maxFee, _feeToken);
+  }
+
   /// Signs and submits [quote]. Returns the transaction hash.
   Future<Felt> send({
-    required WalletKeys keys,
+    required SigningAccount from,
     required TransferQuote quote,
   }) async {
     if (!quote.canSend) {
@@ -246,7 +298,7 @@ class TransferService {
       throw const ChainException('This transfer has not been priced yet');
     }
 
-    final response = await client.accountFor(keys).execute(
+    final response = await client.accountFor(from).execute(
           functionCalls: [
             _transferCall(quote.token, quote.recipient, quote.amount),
           ],
@@ -288,3 +340,15 @@ class TransferService {
     );
   }
 }
+
+
+/// An address that holds nothing, for pricing the expensive case.
+///
+/// Used when a transfer has to be priced before the recipient is known. It has
+/// to be an address no token has ever been sent to, so that the estimate
+/// includes the cost of creating the recipient's balance slot rather than
+/// updating one. This one is derived from a phrase, not from a key: nobody
+/// holds it, and nothing should ever be sent to it.
+final coldAddress = Felt.fromHexString(
+  '0x7469700000000000000000000000000000000000000000000000636f6c64',
+);

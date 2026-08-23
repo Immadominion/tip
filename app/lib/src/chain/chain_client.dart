@@ -11,9 +11,9 @@ library;
 import 'package:starknet/starknet.dart';
 import 'package:starknet_provider/starknet_provider.dart';
 
-import '../wallet/wallet.dart';
 import 'amount.dart';
 import 'network.dart';
+import 'signing_account.dart';
 import 'token.dart';
 
 /// A real answer from the chain that the caller has to deal with.
@@ -265,13 +265,13 @@ class ChainClient {
     return last;
   }
 
-  /// An account ready to sign, for [keys].
-  Account accountFor(WalletKeys keys) => Account(
+  /// An account ready to sign, for [who].
+  Account accountFor(SigningAccount who) => Account(
         provider: submissionProvider,
         signer: StarkAccountSigner(
-          signer: StarkSigner(privateKey: keys.accountPrivateKey),
+          signer: StarkSigner(privateKey: who.privateKey),
         ),
-        accountAddress: keys.accountAddress,
+        accountAddress: who.address,
         chainId: network.chainId,
       );
 }

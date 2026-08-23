@@ -52,7 +52,7 @@ Future<void> main(List<String> args) async {
   stdout.writeln('recipient before: ${before.formatWithSymbol()}');
 
   final quote = await service.quote(
-    keys: sender,
+    from: sender.signing,
     token: token,
     recipient: recipient.accountAddress,
     amount: amount,
@@ -70,7 +70,7 @@ Future<void> main(List<String> args) async {
     exit(1);
   }
 
-  final hash = await service.send(keys: sender, quote: quote);
+  final hash = await service.send(from: sender.signing, quote: quote);
   stdout
     ..writeln('tx:               ${hash.toHexString()}')
     ..writeln('                  ${network.transactionUrl(hash)}')
