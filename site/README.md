@@ -1,22 +1,56 @@
 # usetip.xyz
 
-Two files that have to be served from the domain before a tip link opens the
-app when it is tapped. Until they are, the app still answers to `tip://claim`,
-which needs nothing hosted.
+Everything served from the domain. Deploy the whole folder; the contents of
+`site/` become the site root.
 
-Serve both at the paths below, over https, with no redirect:
+## What has to be there, and why
 
-    https://usetip.xyz/.well-known/apple-app-site-association
-    https://usetip.xyz/.well-known/assetlinks.json
+    /index.html
+    /.well-known/apple-app-site-association
+    /.well-known/assetlinks.json
 
-The Apple file must be served as `application/json` and must not have a file
-extension. Apple fetches it directly rather than through a CDN cache, so a 404
-or a redirect is a silent failure: the link opens Safari and nothing says why.
+The two `.well-known` files are what make a tapped tip link open the app rather
+than a browser. Until they are live the app still answers to `tip://claim`,
+which needs nothing hosted, so this is polish rather than a blocker.
 
-The Android fingerprint currently listed is the local debug keystore. A release
-build is signed with a different key, so its fingerprint has to be added to the
-array before installed release builds will verify. Get it with:
+## The Apple file is fussy
+
+It must be served:
+
+- over https, at exactly that path
+- with no redirect, including no http to https bounce and no trailing slash fix
+- as `application/json`
+- with no file extension
+
+Apple fetches it directly. A 404, a redirect, or the wrong content type is a
+silent failure: the link opens Safari and nothing anywhere says why.
+
+Check it after deploying:
+
+    curl -sSI https://usetip.xyz/.well-known/apple-app-site-association
+
+Look for `200` and `content-type: application/json`. If the host will not set
+the content type for an extensionless file, the file has to move to a host that
+will. Cloudflare Pages and Vercel both allow a header rule; most drag-and-drop
+static hosts do not.
+
+## The Android file needs the release fingerprint
+
+The fingerprint currently listed is this machine's debug keystore. A release
+build is signed with a different key, and installed release builds will not
+verify until its fingerprint is added to the array:
 
     keytool -list -v -keystore <release.keystore> -alias <alias>
 
-Both entries can coexist, which is what you want while testing.
+Both entries can sit in the array at once, which is what you want while
+testing.
+
+## Verifying
+
+Apple, after deploying and reinstalling the app:
+
+    https://app-site-association.cdn-apple.com/a/v1/usetip.xyz
+
+Android:
+
+    https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://usetip.xyz&relation=delegate_permission/common.handle_all_urls

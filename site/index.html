@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tip</title>
+<meta name="description" content="A mobile wallet for Starknet. Hold, send, and tip from your phone.">
+<meta property="og:title" content="tip">
+<meta property="og:description" content="A mobile wallet for Starknet. Hold, send, and tip from your phone.">
+<meta property="og:url" content="https://usetip.xyz">
+<style>
+  :root {
+    --accent: #6D4AE8;
+    --accent-bright: #7F5DF5;
+    --accent-wash: #E9E3FD;
+    --surface: #FBFAFE;
+    --raised: #FFFFFF;
+    --border: #E6E3EF;
+    --ink: #16141D;
+    --muted: #6B6779;
+    --faint: #9C98A8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #15131C;
+      --raised: #1D1A26;
+      --border: #2C2836;
+      --ink: #FBFAFE;
+      --muted: #A5A1B3;
+      --faint: #6B6779;
+      --accent-wash: #241E3B;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 42rem; margin: 0 auto; padding: 5rem 1.5rem 6rem; }
+  h1 { font-size: 3.5rem; letter-spacing: -0.04em; margin: 0; font-weight: 700; }
+  .lede { font-size: 1.35rem; color: var(--muted); margin: 0.75rem 0 0; letter-spacing: -0.01em; }
+  p { color: var(--muted); }
+  h2 { font-size: 1.05rem; margin: 3rem 0 0.75rem; letter-spacing: -0.01em; }
+  ul { padding-left: 1.1rem; color: var(--muted); }
+  li { margin: 0.4rem 0; }
+  a { color: var(--accent); }
+  .card {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 1.25rem 1.4rem;
+    margin-top: 1.5rem;
+  }
+  .card p { margin: 0; font-size: 0.95rem; }
+  .tag {
+    display: inline-block;
+    background: var(--accent-wash);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+  }
+  footer { margin-top: 4rem; color: var(--faint); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">Built for the STRK20 Private Sprint</span>
+  <h1>tip</h1>
+  <p class="lede">Money that is nobody else&rsquo;s business.</p>
+  <p>A wallet for Starknet that lives on your phone. Hold and send any token,
+     and tip someone who has no wallet at all.</p>
+
+  <h2>Tip anyone</h2>
+  <p>A tip link works for a person who has never touched a blockchain. They
+     install tip, open the link, and the money is theirs. Nothing is escrowed
+     and nobody holds it on the way.</p>
+
+  <h2>Self custody, meant literally</h2>
+  <ul>
+    <li>Keys are made on your phone and stay in its keystore</li>
+    <li>Signing in attaches a name, never a key</li>
+    <li>The recovery phrase is yours and works anywhere</li>
+  </ul>
+
+  <h2>Privacy</h2>
+  <p>tip is built on STRK20, StarkWare&rsquo;s shielded pool for Starknet. The
+     client for it is written from scratch in Dart and checked against the
+     protocol&rsquo;s own contracts and the published RFCs.</p>
+
+  <div class="card">
+    <p><strong>Shielded transfers are not live yet.</strong> They need a
+       proving service, and no public endpoint for one is published. Until that
+       resolves the wallet says a shielded balance is unavailable rather than
+       showing you a zero it cannot vouch for.</p>
+  </div>
+
+  <footer>
+    <a href="https://github.com/Immadominion/tip">Source on GitHub</a>
+  </footer>
+</main>
+</body>
+</html>
