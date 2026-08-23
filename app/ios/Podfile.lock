@@ -5,6 +5,8 @@ PODS:
   - flutter_secure_storage_darwin (10.0.0):
     - Flutter
     - FlutterMacOS
+  - integration_test (0.0.1):
+    - Flutter
   - share_plus (0.0.1):
     - Flutter
   - url_launcher_ios (0.0.1):
@@ -14,6 +16,7 @@ DEPENDENCIES:
   - app_links (from `.symlinks/plugins/app_links/ios`)
   - Flutter (from `Flutter`)
   - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
+  - integration_test (from `.symlinks/plugins/integration_test/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
 
@@ -24,6 +27,8 @@ EXTERNAL SOURCES:
     :path: Flutter
   flutter_secure_storage_darwin:
     :path: ".symlinks/plugins/flutter_secure_storage_darwin/darwin"
+  integration_test:
+    :path: ".symlinks/plugins/integration_test/ios"
   share_plus:
     :path: ".symlinks/plugins/share_plus/ios"
   url_launcher_ios:
@@ -33,6 +38,7 @@ SPEC CHECKSUMS:
   app_links: a754cbec3c255bd4bbb4d236ecc06f28cd9a7ce8
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_secure_storage_darwin: 46e401699982ee74142909676535e0f6a7321e58
+  integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   share_plus: 50da8cb520a8f0f65671c6c6a99b3617ed10a58a
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
 
