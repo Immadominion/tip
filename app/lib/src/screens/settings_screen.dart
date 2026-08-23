@@ -10,11 +10,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../auth/auth_service.dart';
 import '../chain/address.dart';
 import '../security/app_lock.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
+import 'sign_in_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -22,12 +24,16 @@ class SettingsScreen extends StatefulWidget {
     required this.wallet,
     required this.onErased,
     this.lock,
+    this.auth,
   });
 
   final WalletController wallet;
 
   /// Null in tests that do not exercise the lock.
   final AppLock? lock;
+
+  /// Null when sign-in is not configured for this build.
+  final AuthService? auth;
 
   /// Called once the wallet has been removed from the device.
   final VoidCallback onErased;
@@ -49,6 +55,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _readLock();
+  }
+
+  Future<void> _signIn() async {
+    final auth = widget.auth;
+    if (auth == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SignInScreen(
+          auth: auth,
+          onSignedIn: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _signOut() async {
+    await widget.auth?.signOut();
+    if (mounted) setState(() {});
   }
 
   Future<void> _readLock() async {
@@ -146,6 +171,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
+
+            if (widget.auth?.isAvailable ?? false) ...[
+              const SizedBox(height: TipTheme.spaceXl),
+              Text('Sign-in', style: text.titleLarge),
+              const SizedBox(height: TipTheme.spaceMd),
+              Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.person_outline, size: 20),
+                      title: Text(
+                        widget.auth!.isSignedIn ? 'Signed in' : 'Not signed in',
+                        style: text.titleMedium,
+                      ),
+                      subtitle: Text(
+                        widget.auth!.displayName ??
+                            'Sign in so your wallet can follow you to another '
+                                'phone.',
+                        style: text.labelSmall,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        TipTheme.spaceMd,
+                        0,
+                        TipTheme.spaceMd,
+                        TipTheme.spaceMd,
+                      ),
+                      child: widget.auth!.isSignedIn
+                          ? OutlinedButton(
+                              onPressed: _signOut,
+                              child: const Text('Sign out'),
+                            )
+                          : FilledButton(
+                              onPressed: _signIn,
+                              child: const Text('Sign in'),
+                            ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        TipTheme.spaceMd,
+                        0,
+                        TipTheme.spaceMd,
+                        TipTheme.spaceMd,
+                      ),
+                      child: Text(
+                        'Signing out leaves this wallet exactly where it is. '
+                        'Your keys are on this phone and no session holds '
+                        'them.',
+                        style: text.labelSmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
 
             if (_lockAvailable) ...[
               const SizedBox(height: TipTheme.spaceXl),

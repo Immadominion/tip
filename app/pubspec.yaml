@@ -62,6 +62,14 @@ dependencies:
   # The screen lock. Face ID, fingerprint, or the device passcode.
   local_auth: ^3.0.2
 
+  # Sign-in. Identity only; the wallet's keys never reach it.
+  #
+  # Held at 2.15 rather than the latest. 2.17 pulls realtime_client 2.13, which
+  # wants web_socket_channel ^3, and the pinned starknet.dart wants ^2. Moving
+  # the wallet's account layer to satisfy a login button is the wrong trade,
+  # and nothing here uses realtime.
+  supabase_flutter: ^2.15.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

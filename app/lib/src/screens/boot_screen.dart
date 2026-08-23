@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../activity/activity_store.dart';
 import '../links/incoming_links.dart';
+import '../auth/auth_service.dart';
 import '../security/app_lock.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
@@ -33,6 +34,7 @@ class BootScreen extends StatefulWidget {
     this.activityStore,
     this.links,
     this.lock,
+    this.auth,
     this.lockAfter = const Duration(seconds: 30),
   });
 
@@ -47,6 +49,8 @@ class BootScreen extends StatefulWidget {
   final IncomingLinks? links;
 
   final AppLock? lock;
+
+  final AuthService? auth;
 
   /// How long the app can sit in the background before it locks again.
   ///
@@ -63,6 +67,7 @@ class BootScreen extends StatefulWidget {
 class _BootScreenState extends State<BootScreen> with WidgetsBindingObserver {
   late final WalletStore _store = widget.store ?? WalletStore();
   late final AppLock _lock = widget.lock ?? AppLock();
+  late final AuthService _auth = widget.auth ?? AuthService();
 
   _Phase _phase = _Phase.checking;
   WalletController? _controller;
@@ -260,6 +265,7 @@ class _BootScreenState extends State<BootScreen> with WidgetsBindingObserver {
             controller: _controller!,
             onWalletErased: _forget,
             lock: _lock,
+            auth: _auth,
           ),
         _Phase.failed => _Failed(message: _error!, onRetry: _load),
       };

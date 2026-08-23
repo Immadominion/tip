@@ -11,7 +11,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/palette.dart';
+import 'sign_in_screen.dart';
 import '../theme/theme.dart';
+import '../auth/auth_service.dart';
 import '../wallet/wallet.dart';
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key, required this.onReady});
@@ -39,6 +41,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     });
   }
 
+  /// Signs in, then carries straight on to making a wallet.
+  ///
+  /// Signing in does not yet restore one: the seed has never left this device,
+  /// so there is nothing on the server to bring back. What it does is attach
+  /// an identity, so that a backup and a tip-by-name have something to hang
+  /// off once they land.
+  Future<void> _signIn() async {
+    final auth = AuthService();
+    if (!auth.isAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign-in is not available in this build')),
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SignInScreen(
+          auth: auth,
+          onSignedIn: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+    if (mounted && auth.isSignedIn) _createWallet();
+  }
+
   Future<void> _finish(String mnemonic) async {
     setState(() => _saving = true);
     try {
@@ -60,6 +87,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               _Step.welcome => _Welcome(
                 onCreate: _createWallet,
                 onRestore: () => setState(() => _step = _Step.restore),
+                onSignIn: _signIn,
               ),
               _Step.restore => _Restore(
                 busy: _saving,
@@ -85,10 +113,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 }
 
 class _Welcome extends StatelessWidget {
-  const _Welcome({required this.onCreate, required this.onRestore});
+  const _Welcome({
+    required this.onCreate,
+    required this.onRestore,
+    required this.onSignIn,
+  });
 
   final VoidCallback onCreate;
   final VoidCallback onRestore;
+  final VoidCallback onSignIn;
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +149,11 @@ class _Welcome extends StatelessWidget {
           FilledButton(
             onPressed: onCreate,
             child: const Text('Create a wallet'),
+          ),
+          const SizedBox(height: TipTheme.spaceSm),
+          OutlinedButton(
+            onPressed: onSignIn,
+            child: const Text('Sign in'),
           ),
           const SizedBox(height: TipTheme.spaceSm),
           OutlinedButton(

@@ -20,6 +20,7 @@ import '../activity/activity_entry.dart';
 import '../chain/address.dart';
 import '../chain/amount.dart';
 import '../chain/network.dart';
+import '../auth/auth_service.dart';
 import '../security/app_lock.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
@@ -39,6 +40,7 @@ class HomeScreen extends StatefulWidget {
     required this.controller,
     required this.onWalletErased,
     this.lock,
+    this.auth,
   });
 
   final WalletController controller;
@@ -48,6 +50,9 @@ class HomeScreen extends StatefulWidget {
 
   /// Passed through to settings, where the lock is turned on and off.
   final AppLock? lock;
+
+  /// Passed through to settings. Null when sign-in is not configured.
+  final AuthService? auth;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -109,6 +114,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           wallet: _wallet,
                           onErased: widget.onWalletErased,
                           lock: widget.lock,
+                          auth: widget.auth,
                         ),
                       ),
                     ),
