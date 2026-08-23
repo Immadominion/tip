@@ -10,13 +10,28 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../chain/address.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
+import '../widgets/address_qr.dart';
 
 class ReceiveScreen extends StatelessWidget {
-  const ReceiveScreen({super.key, required this.address});
+  const ReceiveScreen({super.key, required this.address, this.networkLabel});
 
   final String address;
+
+  /// Shown when the wallet is not on mainnet. Someone scanning this code has
+  /// no other way to tell that the address only exists on a testnet.
+  final String? networkLabel;
+
+  /// The form that goes into the QR code.
+  ///
+  /// Padded to the full sixty-four digits. Both forms are the same address,
+  /// but this is what explorers and other wallets canonicalise to, and a
+  /// scanner that string-compares will match it.
+  String get _encoded => StarknetAddress.canonical(
+        StarknetAddress.parse(address),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +51,33 @@ class ReceiveScreen extends StatelessWidget {
                   child: Column(
                     children: [
                       Text('Your Starknet address', style: text.titleMedium),
-                      const SizedBox(height: TipTheme.spaceMd),
+                      const SizedBox(height: TipTheme.spaceLg),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: TipPalette.surfaceRaised,
+                          borderRadius:
+                              BorderRadius.circular(TipTheme.radiusLarge),
+                          border: Border.all(color: TipPalette.border),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(TipTheme.spaceMd),
+                          child: AddressQr(
+                            data: _encoded,
+                            foreground: TipPalette.ink,
+                            background: TipPalette.surfaceRaised,
+                          ),
+                        ),
+                      ),
+                      if (networkLabel != null) ...[
+                        const SizedBox(height: TipTheme.spaceMd),
+                        Text(
+                          '$networkLabel only. Do not send real funds here.',
+                          style: text.labelSmall
+                              ?.copyWith(color: TipPalette.warning),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                      const SizedBox(height: TipTheme.spaceLg),
                       SelectableText(
                         address,
                         textAlign: TextAlign.center,

@@ -509,6 +509,9 @@ class _Actions extends StatelessWidget {
               MaterialPageRoute<void>(
                 builder: (_) => ReceiveScreen(
                   address: wallet.keys.accountAddress.toHexString(),
+                  networkLabel: wallet.network.isMainnet
+                      ? null
+                      : wallet.network.label,
                 ),
               ),
             ),

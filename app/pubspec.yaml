@@ -38,6 +38,10 @@ dependencies:
 
   google_fonts: ^6.3.3
 
+  # QR encoding only. Pure Dart, no Flutter coupling, so the rendering stays
+  # ours and matches the rest of the app rather than a package's defaults.
+  qr: ^4.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
