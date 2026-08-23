@@ -24,8 +24,10 @@ import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet.dart';
 import '../wallet/wallet_controller.dart';
+import 'claim_screen.dart';
 import 'receive_screen.dart';
 import 'settings_screen.dart';
+import 'tip_screen.dart';
 import 'send_screen.dart';
 
 enum BalanceView { public, private }
@@ -116,6 +118,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   _Hero(view: _view, wallet: _wallet),
                   const SizedBox(height: TipTheme.spaceXl),
                   _Actions(wallet: _wallet),
+                  const SizedBox(height: TipTheme.spaceSm),
+                  Center(
+                    child: TextButton.icon(
+                      icon: const Icon(Icons.link_rounded, size: 16),
+                      label: const Text('Someone sent you a tip link?'),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ClaimScreen(wallet: _wallet),
+                        ),
+                      ),
+                    ),
+                  ),
                   if (_wallet.hasLoaded && !_wallet.isDeployed) ...[
                     const SizedBox(height: TipTheme.spaceMd),
                     const _NotDeployedNote(),
@@ -539,15 +553,13 @@ class _Actions extends StatelessWidget {
         const SizedBox(width: TipTheme.spaceSm + 4),
         Expanded(
           child: _ActionButton(
-            icon: Icons.shield_moon,
-            label: 'Shield',
-            onTap: () => ScaffoldMessenger.of(context)
-              ..hideCurrentSnackBar()
-              ..showSnackBar(
-                const SnackBar(
-                  content: Text('Shielding needs a funded account'),
-                ),
+            icon: Icons.auto_awesome_rounded,
+            label: 'Tip',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => TipScreen(wallet: wallet),
               ),
+            ),
           ),
         ),
       ],
@@ -602,7 +614,16 @@ class _ActivityRow extends StatelessWidget {
     final text = Theme.of(context).textTheme;
 
     final (icon, tint) = switch (entry.status) {
-      ActivityStatus.succeeded => (Icons.arrow_upward_rounded, TipPalette.ink),
+      ActivityStatus.succeeded => (
+          switch (entry.kind) {
+            ActivityKind.claim => Icons.arrow_downward_rounded,
+            ActivityKind.tip => Icons.link_rounded,
+            _ => Icons.arrow_upward_rounded,
+          },
+          entry.kind == ActivityKind.claim
+              ? TipPalette.positive
+              : TipPalette.ink,
+        ),
       ActivityStatus.reverted => (Icons.close_rounded, TipPalette.negative),
       _ => (Icons.schedule_rounded, TipPalette.inkMuted),
     };
@@ -610,6 +631,8 @@ class _ActivityRow extends StatelessWidget {
     final title = switch (entry.kind) {
       ActivityKind.send => 'Sent',
       ActivityKind.deploy => 'Account deployed',
+      ActivityKind.tip => 'Tip link created',
+      ActivityKind.claim => 'Tip claimed',
     };
 
     final subtitle = switch (entry.status) {
@@ -617,9 +640,13 @@ class _ActivityRow extends StatelessWidget {
         'Reverted. The fee was still charged.',
       ActivityStatus.pending => 'Waiting for the network',
       ActivityStatus.unknown => 'Not seen by the network yet',
-      ActivityStatus.succeeded => entry.counterparty == null
-          ? _when(entry.submittedAt)
-          : 'To ${StarknetAddress.short(Felt.fromHexString(entry.counterparty!))}',
+      ActivityStatus.succeeded => switch (entry.kind) {
+          ActivityKind.tip => 'Waiting to be claimed  ·  ${_when(entry.submittedAt)}',
+          ActivityKind.claim => _when(entry.submittedAt),
+          _ => entry.counterparty == null
+              ? _when(entry.submittedAt)
+              : 'To ${StarknetAddress.short(Felt.fromHexString(entry.counterparty!))}',
+        },
     };
 
     return ListTile(

@@ -15,7 +15,18 @@ import 'dart:convert';
 import '../chain/amount.dart';
 import '../chain/token.dart';
 
-enum ActivityKind { send, deploy }
+enum ActivityKind {
+  send,
+
+  /// Deploying the wallet's own account, once, before its first send.
+  deploy,
+
+  /// Funding a claim link. The money has left, but nobody has taken it yet.
+  tip,
+
+  /// Sweeping a claim link into this wallet.
+  claim,
+}
 
 enum ActivityStatus { pending, succeeded, reverted, unknown }
 
@@ -37,10 +48,11 @@ class ActivityEntry {
     required TokenAmount amount,
     required String counterparty,
     required DateTime submittedAt,
+    ActivityKind kind = ActivityKind.send,
   }) =>
       ActivityEntry(
         txHash: txHash,
-        kind: ActivityKind.send,
+        kind: kind,
         submittedAt: submittedAt,
         status: ActivityStatus.pending,
         tokenSymbol: amount.token.symbol,
