@@ -82,6 +82,7 @@ class _BootScreenState extends State<BootScreen> {
         _controller = WalletController.forMnemonic(
           stored,
           activityStore: widget._activityStore,
+          walletStore: _store,
         );
         _phase = _Phase.ready;
       });
@@ -105,16 +106,33 @@ class _BootScreenState extends State<BootScreen> {
       _controller = WalletController.forMnemonic(
         mnemonic,
         activityStore: widget._activityStore,
+        walletStore: _store,
       );
       _phase = _Phase.ready;
     });
+  }
+
+  /// Returns to onboarding after the wallet has been removed.
+  ///
+  /// The controller is dropped rather than reused: it still holds the keys of
+  /// a wallet that no longer exists on this device.
+  void _forget() {
+    final gone = _controller;
+    setState(() {
+      _controller = null;
+      _phase = _Phase.onboarding;
+    });
+    gone?.dispose();
   }
 
   @override
   Widget build(BuildContext context) => switch (_phase) {
         _Phase.checking => const _Splash(),
         _Phase.onboarding => OnboardingScreen(onReady: _adopt),
-        _Phase.ready => HomeScreen(controller: _controller!),
+        _Phase.ready => HomeScreen(
+            controller: _controller!,
+            onWalletErased: _forget,
+          ),
         _Phase.failed => _Failed(message: _error!, onRetry: _load),
       };
 }

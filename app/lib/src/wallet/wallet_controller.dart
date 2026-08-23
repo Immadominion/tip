@@ -17,13 +17,16 @@ import '../chain/chain_client.dart';
 import '../chain/network.dart';
 import '../chain/token.dart';
 import 'wallet.dart';
+import 'wallet_store.dart';
 
 class WalletController extends ChangeNotifier {
   WalletController({
     required this.keys,
     required this.client,
     ActivityStore? activityStore,
-  }) : _activityStore = activityStore ?? ActivityStore();
+    WalletStore? walletStore,
+  })  : _activityStore = activityStore ?? ActivityStore(),
+        _walletStore = walletStore ?? WalletStore();
 
   /// Builds a controller from a seed phrase, on the network this build points
   /// at. The account class hash comes from the network, since an address is
@@ -33,6 +36,7 @@ class WalletController extends ChangeNotifier {
     String mnemonic, {
     TipNetwork? network,
     ActivityStore? activityStore,
+    WalletStore? walletStore,
   }) {
     final target = network ?? TipNetwork.current;
     return WalletController(
@@ -40,12 +44,14 @@ class WalletController extends ChangeNotifier {
           .deriveFrom(mnemonic),
       client: ChainClient(network: target),
       activityStore: activityStore,
+      walletStore: walletStore,
     );
   }
 
   final WalletKeys keys;
   final ChainClient client;
   final ActivityStore _activityStore;
+  final WalletStore _walletStore;
 
   TipNetwork get network => client.network;
 
@@ -140,6 +146,22 @@ class WalletController extends ChangeNotifier {
       notifyListeners();
       await _save();
     }
+  }
+
+  /// Removes the wallet from this device.
+  ///
+  /// The seed goes last. If clearing the activity log fails, the wallet is
+  /// still openable and the user can try again; if the seed went first and the
+  /// log then failed, they would be left with a history they cannot open and
+  /// no way to remove it.
+  Future<void> erase() async {
+    await _activityStore.clear();
+    await _walletStore.deleteSeedPhrase();
+    _activity = const [];
+    _balances = null;
+    _lastUpdated = null;
+    stopPolling();
+    notifyListeners();
   }
 
   Future<void> _save() async {

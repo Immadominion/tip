@@ -25,14 +25,22 @@ import '../theme/theme.dart';
 import '../wallet/wallet.dart';
 import '../wallet/wallet_controller.dart';
 import 'receive_screen.dart';
+import 'settings_screen.dart';
 import 'send_screen.dart';
 
 enum BalanceView { public, private }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.controller});
+  const HomeScreen({
+    super.key,
+    required this.controller,
+    required this.onWalletErased,
+  });
 
   final WalletController controller;
+
+  /// Called when the user removes the wallet from this device.
+  final VoidCallback onWalletErased;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -86,7 +94,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 children: [
                   if (!_wallet.network.isMainnet)
                     _NetworkBanner(label: _wallet.network.label),
-                  _AccountRow(keys: _wallet.keys),
+                  _AccountRow(
+                    keys: _wallet.keys,
+                    onSettings: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => SettingsScreen(
+                          wallet: _wallet,
+                          onErased: widget.onWalletErased,
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: TipTheme.spaceXl),
                   Center(
                     child: _BalanceToggle(
@@ -337,9 +355,10 @@ class _AssetRow extends StatelessWidget {
 }
 
 class _AccountRow extends StatelessWidget {
-  const _AccountRow({required this.keys});
+  const _AccountRow({required this.keys, required this.onSettings});
 
   final WalletKeys keys;
+  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -391,7 +410,7 @@ class _AccountRow extends StatelessWidget {
           ),
         ),
         IconButton(
-          onPressed: null,
+          onPressed: onSettings,
           icon: const Icon(Icons.settings_outlined),
           color: TipPalette.inkMuted,
         ),

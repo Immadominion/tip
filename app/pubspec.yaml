@@ -42,6 +42,10 @@ dependencies:
   # ours and matches the rest of the app rather than a package's defaults.
   qr: ^4.0.0
 
+  # Opening a block explorer. https only, so no scheme registration is needed
+  # on either platform.
+  url_launcher: ^6.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
