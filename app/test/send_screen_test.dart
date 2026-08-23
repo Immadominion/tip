@@ -1,123 +1,152 @@
-/// The send screen's preview: what it composes, and how it fails.
+/// The send screen's compose stage.
+///
+/// Everything here is about refusing to proceed. The interesting behaviour of
+/// a send screen is not the happy path, it is which mistakes it catches before
+/// a signature exists.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:starknet/starknet.dart';
+import 'package:tip/src/chain/amount.dart';
+import 'package:tip/src/chain/chain_client.dart';
+import 'package:tip/src/chain/network.dart';
 import 'package:tip/src/screens/send_screen.dart';
+import 'package:tip/src/theme/theme.dart';
 import 'package:tip/src/wallet/wallet.dart';
-import 'package:tip_privacy/tip_privacy.dart';
+import 'package:tip/src/wallet/wallet_controller.dart';
 
-final _classHash = Felt.fromHexString(
-  '0x01a736d6ed154502257f02b1ccdf4d9d1089f80811cd6acad48e6b6a9d1f2003',
-);
+final _network = TipNetwork.sepolia;
+final _strk = _network.feeToken;
 
-final _token = BigInt.parse('1234', radix: 16);
+class _StubChain extends ChainClient {
+  _StubChain() : super(network: _network);
 
-WalletKeys _keys() => WalletFactory(
-  accountClassHash: _classHash,
-).deriveFrom(WalletFactory.generateMnemonic());
+  @override
+  Future<BalanceSnapshot> balances(Felt address) async => BalanceSnapshot(
+        amounts: [
+          TokenAmount.parse('42.5', _strk),
+          TokenAmount.zero(_network.tokens[1]),
+        ],
+        failures: const {},
+      );
 
-SpendableNote _note(int amount, {int index = 0}) => SpendableNote(
-  channelKey: BigInt.from(0xdef),
-  token: _token,
-  index: index,
-  amount: BigInt.from(amount),
-);
+  @override
+  Future<bool> isDeployed(Felt address) async => true;
+}
 
-Future<void> _pump(
-  WidgetTester tester, {
-  required List<SpendableNote> notes,
-}) async {
-  await tester.pumpWidget(
-    MaterialApp(
-      home: SendScreen(keys: _keys(), notes: notes, token: _token),
-    ),
+Future<WalletController> _wallet() async {
+  final controller = WalletController(
+    keys: WalletFactory(accountClassHash: _network.accountClassHash)
+        .deriveFrom(WalletFactory.generateMnemonic()),
+    client: _StubChain(),
   );
+  await controller.refresh();
+  return controller;
 }
 
-Future<void> _fillAndPreview(
-  WidgetTester tester, {
-  required String recipient,
-  required String amount,
-}) async {
-  await tester.enterText(find.byType(TextField).first, recipient);
-  await tester.enterText(find.byType(TextField).last, amount);
-  await tester.tap(find.text('Preview transfer'));
-  await tester.pumpAndSettle();
-}
+Future<void> _pump(WidgetTester tester, WalletController wallet) =>
+    tester.pumpWidget(
+      MaterialApp(theme: TipTheme.light, home: SendScreen(wallet: wallet)),
+    );
+
+Finder get _reviewButton => find.widgetWithText(FilledButton, 'Review');
+
+bool _enabled(WidgetTester tester) =>
+    tester.widget<FilledButton>(_reviewButton).onPressed != null;
 
 void main() {
-  testWidgets('previews a transfer that has change', (tester) async {
-    await _pump(tester, notes: [_note(100)]);
-    await _fillAndPreview(tester, recipient: '0x456', amount: '70');
+  testWidgets('review is unavailable until both fields are filled',
+      (tester) async {
+    final wallet = await _wallet();
+    await _pump(tester, wallet);
 
-    // Spend one note, pay the recipient, keep the change.
-    expect(find.text('Spend a note'), findsOneWidget);
-    expect(find.text('Create a note'), findsNWidgets(2));
-    expect(find.textContaining('1 nullifier and 2 new notes'), findsOneWidget);
+    expect(_enabled(tester), isFalse);
+
+    await tester.enterText(find.byType(TextField).first, '0x1234abcd');
+    await tester.pump();
+    expect(_enabled(tester), isFalse, reason: 'amount is still empty');
+
+    await tester.enterText(find.byType(TextField).last, '1.5');
+    await tester.pump();
+    expect(_enabled(tester), isTrue);
+
+    wallet.dispose();
   });
 
-  testWidgets('an exact spend produces no change note', (tester) async {
-    await _pump(tester, notes: [_note(100)]);
-    await _fillAndPreview(tester, recipient: '0x456', amount: '100');
+  testWidgets('an Ethereum address is refused by name', (tester) async {
+    final wallet = await _wallet();
+    await _pump(tester, wallet);
 
-    expect(find.text('Create a note'), findsOneWidget);
-    expect(find.textContaining('1 nullifier and 1 new note'), findsOneWidget);
-  });
-
-  testWidgets('spending two notes is surfaced as two nullifiers', (
-    tester,
-  ) async {
-    // Worth showing: more nullifiers is a more distinctive on-chain event.
-    await _pump(tester, notes: [_note(30, index: 0), _note(40, index: 1)]);
-    await _fillAndPreview(tester, recipient: '0x456', amount: '65');
-
-    expect(find.text('Spend a note'), findsNWidgets(2));
-    expect(find.textContaining('2 nullifiers'), findsOneWidget);
-  });
-
-  testWidgets('reports a shortfall with real numbers', (tester) async {
-    await _pump(tester, notes: [_note(10)]);
-    await _fillAndPreview(tester, recipient: '0x456', amount: '100');
-
-    expect(
-      find.text('You have 10 available but tried to send 100.'),
-      findsOneWidget,
+    await tester.enterText(
+      find.byType(TextField).first,
+      '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
     );
+    await tester.enterText(find.byType(TextField).last, '1');
+    await tester.pump();
+
+    expect(find.textContaining('Ethereum'), findsOneWidget);
+    expect(_enabled(tester), isFalse);
+
+    wallet.dispose();
   });
 
-  testWidgets('an empty balance fails rather than previewing', (tester) async {
-    await _pump(tester, notes: const []);
-    await _fillAndPreview(tester, recipient: '0x456', amount: '5');
+  testWidgets('an address that is not hex is refused', (tester) async {
+    final wallet = await _wallet();
+    await _pump(tester, wallet);
 
-    expect(find.textContaining('0 available'), findsOneWidget);
-    expect(find.text('Spend a note'), findsNothing);
+    await tester.enterText(find.byType(TextField).first, '0xzzzz');
+    await tester.pump();
+
+    expect(find.textContaining('not hex'), findsOneWidget);
+    wallet.dispose();
   });
 
-  testWidgets('rejects a malformed address', (tester) async {
-    await _pump(tester, notes: [_note(100)]);
-    await _fillAndPreview(tester, recipient: 'not-an-address', amount: '10');
+  testWidgets('an amount with more precision than STRK has is refused',
+      (tester) async {
+    final wallet = await _wallet();
+    await _pump(tester, wallet);
 
-    expect(find.text('That is not a valid address.'), findsOneWidget);
-  });
-
-  testWidgets('rejects a zero amount', (tester) async {
-    await _pump(tester, notes: [_note(100)]);
-    await _fillAndPreview(tester, recipient: '0x456', amount: '0');
-
-    expect(find.text('Enter an amount greater than zero.'), findsOneWidget);
-  });
-
-  testWidgets('states that sender, recipient, and amount stay hidden', (
-    tester,
-  ) async {
-    await _pump(tester, notes: [_note(100)]);
-    await _fillAndPreview(tester, recipient: '0x456', amount: '70');
-
-    expect(
-      find.textContaining('sender, recipient, and amount are not visible'),
-      findsOneWidget,
+    await tester.enterText(find.byType(TextField).first, '0x1234abcd');
+    await tester.enterText(
+      find.byType(TextField).last,
+      '0.0000000000000000001',
     );
+    await tester.pump();
+
+    expect(find.textContaining('decimal places'), findsOneWidget);
+    expect(_enabled(tester), isFalse);
+
+    wallet.dispose();
+  });
+
+  testWidgets('the balance is shown next to the amount', (tester) async {
+    final wallet = await _wallet();
+    await _pump(tester, wallet);
+
+    expect(find.text('Balance 42.5 STRK'), findsOneWidget);
+    wallet.dispose();
+  });
+
+  testWidgets('it says plainly that the transfer is public', (tester) async {
+    final wallet = await _wallet();
+    await _pump(tester, wallet);
+
+    expect(find.textContaining('public transfer'), findsOneWidget);
+    wallet.dispose();
+  });
+
+  testWidgets('every token on the network can be chosen', (tester) async {
+    final wallet = await _wallet();
+    await _pump(tester, wallet);
+
+    for (final token in _network.tokens) {
+      expect(
+        find.widgetWithText(ChoiceChip, token.symbol),
+        findsOneWidget,
+        reason: token.symbol,
+      );
+    }
+    wallet.dispose();
   });
 }

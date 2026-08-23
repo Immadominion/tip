@@ -475,14 +475,7 @@ class _Actions extends StatelessWidget {
             label: 'Send',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => SendScreen(
-                  keys: wallet.keys,
-                  // Empty until discovery runs against real pool state. The
-                  // screen handles this honestly: it reports that there is
-                  // nothing to spend rather than pretending otherwise.
-                  notes: const [],
-                  token: wallet.network.feeToken.address.toBigInt(),
-                ),
+                builder: (_) => SendScreen(wallet: wallet),
               ),
             ),
           ),
