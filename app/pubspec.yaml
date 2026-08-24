@@ -70,6 +70,10 @@ dependencies:
   # and nothing here uses realtime.
   supabase_flutter: ^2.15.2
 
+  # Argon2id and AES-GCM for the encrypted backup. Already present through
+  # tip_privacy; named here because this package depends on it directly.
+  cryptography: ^2.9.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
