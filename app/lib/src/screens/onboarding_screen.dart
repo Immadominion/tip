@@ -11,9 +11,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/palette.dart';
+import 'restore_backup_screen.dart';
 import 'sign_in_screen.dart';
 import '../theme/theme.dart';
 import '../auth/auth_service.dart';
+import '../backup/backup_service.dart';
 import '../wallet/wallet.dart';
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key, required this.onReady});
@@ -41,12 +43,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     });
   }
 
-  /// Signs in, then carries straight on to making a wallet.
+  /// Signs in, then either brings a wallet back or makes one.
   ///
-  /// Signing in does not yet restore one: the seed has never left this device,
-  /// so there is nothing on the server to bring back. What it does is attach
-  /// an identity, so that a backup and a tip-by-name have something to hang
-  /// off once they land.
+  /// This is the whole point of sign-in: on a second phone there is a sealed
+  /// phrase waiting, and the only thing between the user and their wallet is
+  /// the password they chose. On a first phone there is nothing waiting, so it
+  /// falls through to creating one.
   Future<void> _signIn() async {
     final auth = AuthService();
     if (!auth.isAvailable) {
@@ -55,6 +57,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
       return;
     }
+
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => SignInScreen(
@@ -63,7 +66,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       ),
     );
-    if (mounted && auth.isSignedIn) _createWallet();
+    if (!mounted || !auth.isSignedIn) return;
+
+    setState(() => _saving = true);
+    final hasBackup = await BackupService().exists();
+    if (!mounted) return;
+    setState(() => _saving = false);
+
+    if (!hasBackup) {
+      _createWallet();
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RestoreBackupScreen(
+          service: BackupService(),
+          onRestored: (mnemonic) async {
+            Navigator.of(context).pop();
+            await _finish(mnemonic);
+          },
+          onUsePhrase: () {
+            Navigator.of(context).pop();
+            setState(() => _step = _Step.restore);
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _finish(String mnemonic) async {

@@ -163,8 +163,35 @@ class SealedSeed {
   }
 }
 
+/// How hard the password is to turn into a key.
+///
+/// Separated out so tests can run at a cost that finishes, since the real
+/// numbers take the better part of a second by design and a suite that seals a
+/// dozen times would take a minute of it. Production never passes this: the
+/// default is the real cost, and a blob records the numbers it was made with,
+/// so a cheap one made in a test cannot be mistaken for a real one later.
+class Argon2Cost {
+  const Argon2Cost({
+    required this.memoryKib,
+    required this.iterations,
+    required this.parallelism,
+  });
+
+  final int memoryKib;
+  final int iterations;
+  final int parallelism;
+
+  static const production = Argon2Cost(
+    memoryKib: argonMemoryKib,
+    iterations: argonIterations,
+    parallelism: argonParallelism,
+  );
+}
+
 class SeedVault {
-  const SeedVault();
+  const SeedVault({this.cost = Argon2Cost.production});
+
+  final Argon2Cost cost;
 
   /// Why [password] is not usable, or null if it is.
   static String? passwordProblem(String password) {
@@ -198,9 +225,9 @@ class SeedVault {
     final key = await _deriveKey(
       password: password,
       salt: salt,
-      memoryKib: argonMemoryKib,
-      iterations: argonIterations,
-      parallelism: argonParallelism,
+      memoryKib: cost.memoryKib,
+      iterations: cost.iterations,
+      parallelism: cost.parallelism,
     );
 
     final box = await AesGcm.with256bits().encrypt(
@@ -211,9 +238,9 @@ class SeedVault {
 
     return SealedSeed(
       version: sealedSeedVersion,
-      memoryKib: argonMemoryKib,
-      iterations: argonIterations,
-      parallelism: argonParallelism,
+      memoryKib: cost.memoryKib,
+      iterations: cost.iterations,
+      parallelism: cost.parallelism,
       salt: salt,
       nonce: nonce,
       ciphertext: Uint8List.fromList(box.cipherText),

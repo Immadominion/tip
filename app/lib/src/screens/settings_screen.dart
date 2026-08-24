@@ -11,11 +11,13 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/auth_service.dart';
+import '../backup/backup_service.dart';
 import '../chain/address.dart';
 import '../security/app_lock.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
+import 'backup_screen.dart';
 import 'sign_in_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -45,6 +47,9 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _phraseVisible = false;
 
+  bool _hasBackup = false;
+  bool _checkingBackup = false;
+
   bool _lockAvailable = false;
   bool _lockEnabled = false;
   bool _lockBusy = false;
@@ -55,6 +60,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _readLock();
+    _readBackup();
+  }
+
+  Future<void> _readBackup() async {
+    final auth = widget.auth;
+    if (auth == null || !auth.isSignedIn) return;
+    setState(() => _checkingBackup = true);
+    final exists = await BackupService().exists();
+    if (!mounted) return;
+    setState(() {
+      _hasBackup = exists;
+      _checkingBackup = false;
+    });
+  }
+
+  Future<void> _backUp() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => BackupScreen(
+          service: BackupService(),
+          mnemonic: _wallet.keys.mnemonic,
+          replacing: _hasBackup,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (saved ?? false) {
+      setState(() => _hasBackup = true);
+      _say('Backup saved.');
+    }
+  }
+
+  Future<void> _removeBackup() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove the backup?'),
+        content: const Text(
+          'The sealed copy is deleted from the server. This wallet stays on '
+          'this phone, but signing in on another one will no longer bring it '
+          'back.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: TipPalette.negative,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (!(ok ?? false)) return;
+
+    try {
+      await BackupService().remove();
+      if (mounted) setState(() => _hasBackup = false);
+    } catch (error) {
+      if (mounted) _say('Could not remove it: $error');
+    }
   }
 
   Future<void> _signIn() async {
@@ -68,7 +138,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      await _readBackup();
+    }
   }
 
   Future<void> _signOut() async {
@@ -225,6 +298,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ],
+
+            if ((widget.auth?.isSignedIn ?? false)) ...[
+              const SizedBox(height: TipTheme.spaceXl),
+              Text('Backup', style: text.titleLarge),
+              const SizedBox(height: TipTheme.spaceMd),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(TipTheme.spaceMd),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        _checkingBackup
+                            ? 'Checking'
+                            : _hasBackup
+                                ? 'Sealed and stored'
+                                : 'No backup yet',
+                        style: text.titleMedium,
+                      ),
+                      const SizedBox(height: TipTheme.spaceXs),
+                      Text(
+                        _hasBackup
+                            ? 'Signing in on another phone and typing your '
+                                'backup password brings this wallet back. We '
+                                'hold it locked and cannot open it.'
+                            : 'Lock your recovery phrase with a password and '
+                                'store it, so signing in on a new phone is '
+                                'enough to get this wallet back.',
+                        style: text.bodyMedium,
+                      ),
+                      const SizedBox(height: TipTheme.spaceMd),
+                      FilledButton(
+                        onPressed: _checkingBackup ? null : _backUp,
+                        child: Text(
+                          _hasBackup ? 'Change the password' : 'Back up',
+                        ),
+                      ),
+                      if (_hasBackup) ...[
+                        const SizedBox(height: TipTheme.spaceSm),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: TipPalette.negative,
+                          ),
+                          onPressed: _removeBackup,
+                          child: const Text('Remove the backup'),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ],
