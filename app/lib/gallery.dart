@@ -21,12 +21,19 @@ import 'src/chain/chain_client.dart';
 import 'src/chain/network.dart';
 import 'src/screens/claim_screen.dart';
 import 'src/screens/home_screen.dart';
+import 'src/screens/backup_screen.dart';
 import 'src/screens/lock_screen.dart';
+import 'src/screens/restore_backup_screen.dart';
+import 'src/screens/sign_in_screen.dart';
 import 'src/screens/onboarding_screen.dart';
 import 'src/screens/receive_screen.dart';
 import 'src/screens/send_screen.dart';
 import 'src/screens/settings_screen.dart';
 import 'src/screens/tip_screen.dart';
+import 'src/auth/auth_service.dart';
+import 'src/backup/backup_repository.dart';
+import 'src/backup/backup_service.dart';
+import 'src/backup/seed_vault.dart';
 import 'src/security/app_lock.dart';
 import 'src/theme/palette.dart';
 import 'src/theme/theme.dart';
@@ -66,6 +73,23 @@ class _GalleryLock extends AppLock {
 
   @override
   Future<bool> authenticate({String reason = ''}) async => true;
+}
+
+/// Holds one sealed blob, so the backup screens render without a server.
+class _GalleryBackups implements BackupRepository {
+  SealedSeed? stored;
+
+  @override
+  Future<void> put(SealedSeed sealed) async => stored = sealed;
+
+  @override
+  Future<SealedSeed?> fetch() async => stored;
+
+  @override
+  Future<bool> exists() async => stored != null;
+
+  @override
+  Future<void> remove() async => stored = null;
 }
 
 class _GalleryActivity extends ActivityStore {
@@ -169,6 +193,25 @@ class _Gallery extends StatelessWidget {
                 label: 'Lock',
                 child: LockScreen(lock: _GalleryLock(), onUnlocked: () {}),
               ),
+              _Frame(
+                label: 'Sign in',
+                child: SignInScreen(auth: AuthService(), onSignedIn: () {}),
+              ),
+              _Frame(
+                label: 'Back up',
+                child: BackupScreen(
+                  service: BackupService(repository: _GalleryBackups()),
+                  mnemonic: _phrase,
+                ),
+              ),
+              _Frame(
+                label: 'Unlock backup',
+                child: RestoreBackupScreen(
+                  service: BackupService(repository: _GalleryBackups()),
+                  onRestored: (_) async {},
+                  onUsePhrase: () {},
+                ),
+              ),
             ],
           ),
         ),
@@ -215,11 +258,17 @@ class _Frame extends StatelessWidget {
               borderRadius: BorderRadius.circular(24),
               child: SizedBox.fromSize(
                 size: size,
-                child: MediaQuery(
-                  data: MediaQueryData(size: size, devicePixelRatio: 3),
-                  child: Navigator(
-                    onGenerateRoute: (_) =>
-                        MaterialPageRoute<void>(builder: (_) => child),
+                // Focus is blocked so a screen that autofocuses a field does
+                // not throw the keyboard up over its neighbours. The app wants
+                // that autofocus; a wall of screens does not.
+                child: FocusScope(
+                  canRequestFocus: false,
+                  child: MediaQuery(
+                    data: MediaQueryData(size: size, devicePixelRatio: 3),
+                    child: Navigator(
+                      onGenerateRoute: (_) =>
+                          MaterialPageRoute<void>(builder: (_) => child),
+                    ),
                   ),
                 ),
               ),
