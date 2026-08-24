@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms &middot; tip</title>
+<meta name="description" content="The terms of using tip, including the parts about irreversibility that matter most.">
+<style>
+  :root {
+    --accent: #6D4AE8;
+    --accent-wash: #E9E3FD;
+    --surface: #FBFAFE;
+    --raised: #FFFFFF;
+    --border: #E6E3EF;
+    --ink: #16141D;
+    --muted: #6B6779;
+    --faint: #9C98A8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent: #8E72F2;
+      --accent-wash: #241E3B;
+      --surface: #15131C;
+      --raised: #1D1A26;
+      --border: #2C2836;
+      --ink: #FBFAFE;
+      --muted: #A5A1B3;
+      --faint: #6B6779;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 40rem; margin: 0 auto; padding: 4rem 1.5rem 5rem; }
+  .back {
+    display: inline-block;
+    font-size: .9rem;
+    color: var(--muted);
+    text-decoration: none;
+    margin-bottom: 2.5rem;
+  }
+  .back:hover { color: var(--accent); }
+  h1 { font-size: 2.4rem; letter-spacing: -0.035em; margin: 0; font-weight: 700; line-height: 1.1; }
+  .updated { color: var(--faint); font-size: .88rem; margin: .6rem 0 0; }
+  .lede { font-size: 1.1rem; color: var(--muted); margin: 1.5rem 0 0; }
+  h2 { font-size: 1.1rem; margin: 2.75rem 0 .6rem; letter-spacing: -0.012em; }
+  p { color: var(--muted); margin: .8rem 0; }
+  ul { padding-left: 1.15rem; color: var(--muted); margin: .8rem 0; }
+  li { margin: .45rem 0; }
+  strong { color: var(--ink); font-weight: 600; }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  .card {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.2rem 1.4rem;
+    margin: 1.5rem 0;
+  }
+  .card p:first-child { margin-top: 0; }
+  .card p:last-child { margin-bottom: 0; }
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    color: var(--faint);
+    font-size: .85rem;
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+  footer a { color: var(--faint); }
+  footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">&larr; tip</a>
+
+  <h1>Terms of use</h1>
+  <p class="updated">Last updated 24 August 2026</p>
+
+  <p class="lede">Short, and the important parts are near the top rather than
+    buried. Using tip means accepting these.</p>
+
+  <h2>What tip is</h2>
+  <p>tip is self-custody wallet software for the Starknet blockchain. It runs on
+    your phone. It is not a bank, an exchange, a broker, or a custodian, and we
+    never hold, control, or have access to your funds at any point.</p>
+
+  <h2>Your keys are yours, and so is the responsibility</h2>
+  <div class="card">
+    <p><strong>We cannot recover your wallet.</strong> Your recovery phrase is
+      generated on your device and never sent to us. If you lose it and lose the
+      device, the funds are gone permanently. Nobody, including us, can restore
+      them, reverse it, or make an exception.</p>
+    <p><strong>We cannot reverse a transaction.</strong> Once a transfer is
+      accepted by the network it is final. Sending to a wrong address means the
+      funds are gone.</p>
+  </div>
+  <p>Write your recovery phrase down and keep it somewhere only you can reach.
+    Anyone who reads it controls your money completely.</p>
+
+  <h2>Fees</h2>
+  <p>Starknet charges a fee for every transaction, paid in STRK to the network
+    rather than to us. <strong>A transaction that fails still costs its fee.</strong>
+    We do not take a cut of transfers or tips.</p>
+
+  <h2>Tip links</h2>
+  <p>A tip link holds funds in a throwaway account, and the link itself contains
+    the key to it. This makes it a bearer instrument: <strong>whoever reads the
+    link can claim it.</strong> Posting one publicly, or sending it over a
+    medium that keeps history, means anyone who can see it can take it. Treat a
+    tip link the way you would treat cash.</p>
+
+  <h2>Privacy features</h2>
+  <p>tip is built on STRK20, a shielded pool operated as part of the Starknet
+    protocol and not by us. Shielded transfers are not yet available in the app.
+    Ordinary transfers are fully public, and the app says so on every screen
+    where it matters. No privacy feature is a guarantee of anonymity against a
+    determined and well resourced observer.</p>
+
+  <h2>The software is provided as it is</h2>
+  <p>tip is early software, published under the MIT licence, and provided
+    without warranty of any kind, express or implied. It may contain defects. It
+    may be unavailable. The blockchains and third-party services it depends on
+    may fail, change, or disappear.</p>
+  <p>To the fullest extent the law allows, we are not liable for any loss of
+    funds, loss of data, loss of profit, or any indirect or consequential damage
+    arising from using tip. You use it at your own risk.</p>
+
+  <h2>Using it lawfully</h2>
+  <p>You are responsible for complying with the law where you live, including
+    any tax obligations. Do not use tip for anything illegal. We do not monitor
+    what you do with it and, by design, we could not if we wanted to.</p>
+
+  <h2>Changes</h2>
+  <p>These terms may change. The revised version is posted here with a new date.
+    Continuing to use tip after a change means accepting it.</p>
+
+  <h2>Governing law</h2>
+  <p>These terms are governed by the laws of the Federal Republic of Nigeria.</p>
+
+  <h2>Contact</h2>
+  <p><a href="mailto:hello@usetip.xyz">hello@usetip.xyz</a></p>
+
+  <footer>
+    <a href="/">Home</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/Immadominion/tip" target="_blank" rel="noopener">Source</a>
+  </footer>
+</main>
+</body>
+</html>

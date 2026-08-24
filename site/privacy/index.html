@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy &middot; tip</title>
+<meta name="description" content="What tip collects, what it cannot collect, and what the blockchain publishes regardless.">
+<style>
+  :root {
+    --accent: #6D4AE8;
+    --accent-wash: #E9E3FD;
+    --surface: #FBFAFE;
+    --raised: #FFFFFF;
+    --border: #E6E3EF;
+    --ink: #16141D;
+    --muted: #6B6779;
+    --faint: #9C98A8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent: #8E72F2;
+      --accent-wash: #241E3B;
+      --surface: #15131C;
+      --raised: #1D1A26;
+      --border: #2C2836;
+      --ink: #FBFAFE;
+      --muted: #A5A1B3;
+      --faint: #6B6779;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 40rem; margin: 0 auto; padding: 4rem 1.5rem 5rem; }
+  .back {
+    display: inline-block;
+    font-size: .9rem;
+    color: var(--muted);
+    text-decoration: none;
+    margin-bottom: 2.5rem;
+  }
+  .back:hover { color: var(--accent); }
+  h1 { font-size: 2.4rem; letter-spacing: -0.035em; margin: 0; font-weight: 700; line-height: 1.1; }
+  .updated { color: var(--faint); font-size: .88rem; margin: .6rem 0 0; }
+  .lede { font-size: 1.1rem; color: var(--muted); margin: 1.5rem 0 0; }
+  h2 { font-size: 1.1rem; margin: 2.75rem 0 .6rem; letter-spacing: -0.012em; }
+  p { color: var(--muted); margin: .8rem 0; }
+  ul { padding-left: 1.15rem; color: var(--muted); margin: .8rem 0; }
+  li { margin: .45rem 0; }
+  strong { color: var(--ink); font-weight: 600; }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  .card {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.2rem 1.4rem;
+    margin: 1.5rem 0;
+  }
+  .card p:first-child { margin-top: 0; }
+  .card p:last-child { margin-bottom: 0; }
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    color: var(--faint);
+    font-size: .85rem;
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+  footer a { color: var(--faint); }
+  footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">&larr; tip</a>
+
+  <h1>Privacy</h1>
+  <p class="updated">Last updated 24 August 2026</p>
+
+  <p class="lede">tip is a wallet. Wallets that quietly collect things are the
+    reason this one is written the way it is, so this page is specific rather
+    than broad.</p>
+
+  <h2>What never leaves your phone</h2>
+  <p>Your recovery phrase, the private key derived from it, your STRK20 viewing
+    key, and your activity history are generated on your device and held in the
+    platform keystore, which is the iOS Keychain or the Android Keystore.</p>
+  <p><strong>We have no copy of any of them and no way to obtain one.</strong>
+    Not on request, not under compulsion. There is nothing on our side to hand
+    over. This also means we cannot recover your wallet if you lose the phrase.</p>
+
+  <h2>What we collect when you sign in</h2>
+  <p>Signing in is optional. The wallet works without it. If you do sign in, we
+    receive and store:</p>
+  <ul>
+    <li>your email address, if you use the email code, or</li>
+    <li>your email address, display name or username, and the account
+      identifier your provider issues, if you use Google or X.</li>
+  </ul>
+  <p>That is the whole list. It is stored by <a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase</a>,
+    who host authentication for us, and it exists so a future version can carry
+    your wallet to a second device and let people tip you by name rather than by
+    sixty-four hexadecimal digits.</p>
+  <p>Signing in does not give us your keys and does not let us move your money.</p>
+
+  <h2>What we do not collect</h2>
+  <ul>
+    <li>No analytics and no usage tracking of any kind</li>
+    <li>No advertising identifiers and no third-party trackers</li>
+    <li>No location, contacts, photos, or device fingerprinting</li>
+    <li>No record of your balances, transactions, or who you pay</li>
+  </ul>
+
+  <h2>What the camera does</h2>
+  <p>The camera is used only to read a QR code, and only while that screen is
+    open. Frames are decoded on the device and discarded. No image is stored,
+    and none is transmitted anywhere.</p>
+
+  <h2>What other people can see regardless</h2>
+  <div class="card">
+    <p><strong>Starknet is a public ledger.</strong> An ordinary transfer
+      publishes the sending address, the receiving address, the amount, and the
+      time, permanently and to everyone. That is a property of the blockchain,
+      not a choice we made, and nothing in this policy changes it.</p>
+  </div>
+  <p>To read balances the app talks to public Starknet nodes, currently operated
+    by Cartridge, Zan and Lava. Those operators can see the IP address your
+    request came from and the address it asked about. We do not control them and
+    they are not bound by this policy. Their own terms apply.</p>
+
+  <h2>Keeping it or deleting it</h2>
+  <p>The sign-in record is kept until you ask for it to be deleted. Email
+    <a href="mailto:privacy@usetip.xyz">privacy@usetip.xyz</a> and we will remove
+    the account and everything attached to it.</p>
+  <p>Removing the wallet from Settings erases the phrase and the activity log
+    from your device. Note that this does not touch anything on the blockchain,
+    which cannot be erased by anyone.</p>
+
+  <h2>Children</h2>
+  <p>tip is not intended for anyone under 18, and we do not knowingly collect
+    anything from them.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the revised version is posted here with a new date
+    at the top. Material changes will also be announced in the app.</p>
+
+  <h2>Contact</h2>
+  <p><a href="mailto:privacy@usetip.xyz">privacy@usetip.xyz</a></p>
+
+  <footer>
+    <a href="/">Home</a>
+    <a href="/terms">Terms</a>
+    <a href="https://github.com/Immadominion/tip" target="_blank" rel="noopener">Source</a>
+  </footer>
+</main>
+</body>
+</html>

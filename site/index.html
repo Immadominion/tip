@@ -65,7 +65,18 @@
     font-weight: 600;
     margin-bottom: 1.5rem;
   }
-  footer { margin-top: 4rem; color: var(--faint); font-size: 0.85rem; }
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    color: var(--faint);
+    font-size: 0.85rem;
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+  footer a { color: var(--faint); }
+  footer a:hover { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -101,7 +112,9 @@
   </div>
 
   <footer>
-    <a href="https://github.com/Immadominion/tip">Source on GitHub</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+    <a href="https://github.com/Immadominion/tip" target="_blank" rel="noopener">Source</a>
   </footer>
 </main>
 </body>

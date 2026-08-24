@@ -6,8 +6,23 @@ Everything served from the domain. Deploy the whole folder; the contents of
 ## What has to be there, and why
 
     /index.html
+    /privacy/index.html
+    /terms/index.html
     /.well-known/apple-app-site-association
     /.well-known/assetlinks.json
+
+X requires a reachable privacy policy and terms page before it will grant the
+"Request email from users" permission, which is what makes Sign in with X
+usable. Those two pages exist for that, and they are also the honest thing to
+publish for a wallet.
+
+Note that pxxl serves `index.html` for any unknown path, so a route can return
+200 while showing the wrong page. Check the content, not the status:
+
+    curl -sS https://usetip.xyz/privacy | grep -c "What never leaves your phone"
+
+One or more means the real page is being served. Zero means the catch-all is
+answering and the directory did not deploy.
 
 The two `.well-known` files are what make a tapped tip link open the app rather
 than a browser. Until they are live the app still answers to `tip://claim`,
@@ -29,10 +44,15 @@ Check it after deploying:
 
     curl -sSI https://usetip.xyz/.well-known/apple-app-site-association
 
-Look for `200` and `content-type: application/json`. If the host will not set
-the content type for an extensionless file, the file has to move to a host that
-will. Cloudflare Pages and Vercel both allow a header rule; most drag-and-drop
-static hosts do not.
+Look for `200` and `content-type: application/json`.
+
+As of the first deploy, pxxl serves it as `application/octet-stream`, which
+Apple ignores. `assetlinks.json` is fine because it has an extension. Moving
+the site to Cloudflare Pages or Vercel fixes it: `_headers` and `vercel.json`
+in this folder already carry the rule for both.
+
+This only affects https links opening the app. `tip://claim` works regardless,
+so it is polish rather than a blocker.
 
 ## The Android file needs the release fingerprint
 
