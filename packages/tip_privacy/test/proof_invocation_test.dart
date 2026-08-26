@@ -141,4 +141,70 @@ void main() {
       expect(invocation.calldata[3], equals('0x8'));
     });
   });
+
+  _applyActionsTests();
+}
+
+void _applyActionsTests() {
+  group('applyActionsCalldata', () {
+    // The shape of a real proof message, from the live Sepolia prover: the
+    // pool's class hash, then a length-prefixed Span<ServerAction>.
+    const payload = [
+      '0x56ab118a8a6e38efc93ad758cefe909fee421fa931ce3cf72df624d345623b2',
+      '0x3',
+      '0x0',
+      '0xaaa',
+      '0x1',
+    ];
+
+    test('drops the class hash and keeps the span intact', () {
+      final calldata = applyActionsCalldata(messagePayload: payload);
+      expect(calldata.first, equals('0x3'), reason: 'the span length leads');
+      expect(calldata.sublist(0, 4), equals(payload.sublist(1)));
+    });
+
+    test('an absent attestation is Option::None, which is variant one', () {
+      // The pool's ABI lists Some before None. Getting this backwards reads as
+      // a malformed attestation rather than an absent one.
+      expect(applyActionsCalldata(messagePayload: payload).last, equals('0x1'));
+    });
+
+    test('an attestation appends Some and its three fields', () {
+      final calldata = applyActionsCalldata(
+        messagePayload: payload,
+        screening: const ScreeningAttestationFelts(
+          issuedAt: '0x64',
+          r: '0xa1',
+          s: '0xb2',
+        ),
+      );
+      expect(
+        calldata.sublist(calldata.length - 4),
+        equals(['0x0', '0x64', '0xa1', '0xb2']),
+      );
+    });
+
+    test('the signature tuple carries no length prefix of its own', () {
+      final calldata = applyActionsCalldata(
+        messagePayload: payload,
+        screening: const ScreeningAttestationFelts(
+          issuedAt: '0x1',
+          r: '0x2',
+          s: '0x3',
+        ),
+      );
+      // Some, issued_at, r, s. A tuple serialises as its members in order.
+      expect(calldata.length, equals(payload.length - 1 + 4));
+    });
+
+    test('a payload too short to hold actions is refused', () {
+      for (final short in [<String>[], ['0xc']]) {
+        expect(
+          () => applyActionsCalldata(messagePayload: short),
+          throwsA(isA<ProtocolException>()),
+          reason: '$short',
+        );
+      }
+    });
+  });
 }

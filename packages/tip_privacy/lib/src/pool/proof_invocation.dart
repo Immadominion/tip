@@ -180,3 +180,60 @@ ProofInvocation buildProofInvocation({
     resourceBounds: resourceBounds,
   );
 }
+
+/// Cairo `Option::None`, as the pool's ABI orders the variants.
+///
+/// The ABI lists `Some` before `None`, so `None` is variant 1. Getting this
+/// backwards produces calldata the contract reads as a malformed attestation
+/// rather than as an absent one.
+const optionNone = '0x1';
+const optionSome = '0x0';
+
+/// The calldata for `apply_actions(actions, screening)`.
+///
+/// [messagePayload] is the L2 to L1 message the proved execution emitted, taken
+/// straight from the proof. Its first felt is the pool's own class hash and the
+/// rest is already a serialised `Span<ServerAction>`, so the class hash is
+/// dropped and the remainder passes through untouched. Recompiling the actions
+/// locally instead would be asking two parties to agree about something only
+/// one of them proved.
+///
+/// [screening] is the attestation the prover returns for transactions the
+/// compliance layer had to sign. Absent for everything else.
+List<String> applyActionsCalldata({
+  required List<String> messagePayload,
+  ScreeningAttestationFelts? screening,
+}) {
+  if (messagePayload.length < 2) {
+    throw const ProtocolException(
+      'The proof message is too short to contain any server actions',
+    );
+  }
+  return [
+    ...messagePayload.skip(1),
+    ...(screening?.encode() ?? const [optionNone]),
+  ];
+}
+
+/// A screening attestation, ready to append to `apply_actions` calldata.
+///
+/// Kept as strings rather than as the proving client's own type so that this
+/// module stays free of the service layer. The caller converts.
+class ScreeningAttestationFelts {
+  const ScreeningAttestationFelts({
+    required this.issuedAt,
+    required this.r,
+    required this.s,
+  });
+
+  /// Seconds, as the contract's `u64`.
+  final String issuedAt;
+  final String r;
+  final String s;
+
+  /// `Option::Some(ScreeningAttestation { issued_at, signature: (r, s) })`.
+  ///
+  /// The signature is a Cairo tuple, which serialises as its two members in
+  /// order with no length prefix.
+  List<String> encode() => [optionSome, issuedAt, r, s];
+}

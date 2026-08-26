@@ -21,6 +21,7 @@ class ProofResult {
   const ProofResult({
     required this.proof,
     required this.proofFacts,
+    this.messages = const [],
     this.screeningSignature,
   });
 
@@ -31,6 +32,10 @@ class ProofResult {
       proof: json['proof'] as String? ?? '',
       proofFacts: (json['proof_facts'] as List<dynamic>? ?? const [])
           .map((e) => e as String)
+          .toList(),
+      messages: (json['l2_to_l1_messages'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ProvedMessage.fromJson)
           .toList(),
       screeningSignature:
           signature == null ? null : ScreeningSignature.fromJson(signature),
@@ -43,8 +48,63 @@ class ProofResult {
   /// Facts the on-chain verifier checks the proof against.
   final List<String> proofFacts;
 
+  /// Messages the proved execution emitted towards L1.
+  ///
+  /// Not incidental. The pool compiles the client's actions into server actions
+  /// and emits them as an L2 to L1 message, so this is where the calldata for
+  /// `apply_actions` comes from. Calling `compile_actions` separately would ask
+  /// the chain to do the same work twice and risk the two disagreeing.
+  final List<ProvedMessage> messages;
+
   /// Present only for transactions the compliance layer had to attest.
   final ScreeningSignature? screeningSignature;
+
+  /// The server actions the pool compiled, as raw felts.
+  ///
+  /// [poolAddress] identifies which message to read: the proved transaction is
+  /// sent by the pool, so the message from that address is the one carrying its
+  /// output.
+  List<String> serverActionsFor(String poolAddress) {
+    final wanted = _normaliseHex(poolAddress);
+    for (final message in messages) {
+      if (_normaliseHex(message.fromAddress) == wanted) return message.payload;
+    }
+    throw ProtocolException(
+      'The proof carried no message from the pool at $poolAddress, so there '
+      'are no server actions to apply',
+    );
+  }
+}
+
+/// One L2 to L1 message emitted by a proved execution.
+class ProvedMessage {
+  const ProvedMessage({
+    required this.fromAddress,
+    required this.toAddress,
+    required this.payload,
+  });
+
+  factory ProvedMessage.fromJson(Map<String, dynamic> json) => ProvedMessage(
+        fromAddress: json['from_address'] as String? ?? '0x0',
+        toAddress: json['to_address'] as String? ?? '0x0',
+        payload: (json['payload'] as List<dynamic>? ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+      );
+
+  final String fromAddress;
+  final String toAddress;
+  final List<String> payload;
+}
+
+/// Compares addresses by value, since the same one is written with and without
+/// leading zeros depending on who wrote it.
+String _normaliseHex(String value) {
+  final digits = value.toLowerCase().replaceFirst('0x', '').replaceFirst(
+        RegExp('^0+'),
+        '',
+      );
+  return digits.isEmpty ? '0' : digits;
 }
 
 /// A screening attestation the prover attaches to deposits that need one.

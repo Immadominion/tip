@@ -140,6 +140,18 @@ Future<void> main(List<String> args) async {
     for (final fact in result.proofFacts.take(4)) {
       stdout.writeln('    $fact');
     }
+
+    stdout.writeln('');
+    stdout.writeln('l2 to l1 messages: ${result.messages.length}');
+    for (final message in result.messages) {
+      stdout
+        ..writeln('  from ${message.fromAddress}')
+        ..writeln('  to   ${message.toAddress}')
+        ..writeln('  payload ${message.payload.length} felts:');
+      for (var i = 0; i < message.payload.length; i++) {
+        stdout.writeln('    [$i] ${message.payload[i]}');
+      }
+    }
   } on tp.ProvingException catch (error) {
     stdout
       ..writeln('')
