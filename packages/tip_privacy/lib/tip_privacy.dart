@@ -21,6 +21,7 @@ export 'src/pool/actions.dart';
 export 'src/pool/flows.dart';
 export 'src/pool/pool_simulator.dart';
 export 'src/pool/proof_invocation.dart';
+export 'src/pool/proof_transaction.dart';
 export 'src/pool/proving_rules.dart';
 export 'src/pool/serde.dart';
 export 'src/ohttp/varint.dart';

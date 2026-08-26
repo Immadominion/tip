@@ -22,6 +22,13 @@ dependencies:
 
 dev_dependencies:
   lints: ^5.0.0
+  # Only for tests: the SDK's own v3 signer is the reference our proof-aware
+  # transaction hash is checked against.
+  starknet_provider:
+    git:
+      url: https://github.com/focustree/starknet.dart.git
+      ref: 3f1720a8f7b1094993144ca2ba92e840b7f98d29
+      path: packages/starknet_provider
   test: ^1.25.8
 
 # starknet.dart is a melos monorepo whose published `starknet` package depends on
