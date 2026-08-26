@@ -108,11 +108,28 @@ void main() {
       );
     });
 
-    test('resource bounds default to zero and serialise in full', () {
+    test('L2 gas defaults to a limit the prover will accept', () {
+      // The live prover rejects a zero L2 limit outright: it is the ceiling
+      // the OS enforces on the execution, not a fee the user pays. This
+      // invocation is never broadcast, so the safe upper bound is the right
+      // default and asking for an estimate first would be a round trip spent
+      // on nothing.
       final bounds =
           _build().toJson()['resource_bounds'] as Map<String, dynamic>;
       expect(bounds.keys, containsAll(['l1_gas', 'l1_data_gas', 'l2_gas']));
-      expect((bounds['l2_gas'] as Map)['max_amount'], equals('0x0'));
+      expect(
+        (bounds['l2_gas'] as Map)['max_amount'],
+        equals(provingL2GasLimit),
+      );
+      expect((bounds['l2_gas'] as Map)['max_amount'], isNot(equals('0x0')));
+    });
+
+    test('the fee bounds stay at zero, since nothing is being paid for', () {
+      final bounds =
+          _build().toJson()['resource_bounds'] as Map<String, dynamic>;
+      expect((bounds['l1_gas'] as Map)['max_amount'], equals('0x0'));
+      expect((bounds['l1_data_gas'] as Map)['max_amount'], equals('0x0'));
+      expect((bounds['l2_gas'] as Map)['max_price_per_unit'], equals('0x0'));
     });
 
     test('a multi-action batch lengthens the inner calldata', () {
