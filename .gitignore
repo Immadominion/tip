@@ -49,3 +49,8 @@ packages/*/pubspec.lock
 
 # Local dev account material, never committed
 .dev-account.json
+
+# StarkWare testnet environment. Confidential: private keys and internal
+# endpoints that are not ours to publish.
+.strk20-env.json
+.dev-account.json

@@ -18,11 +18,32 @@ import 'actions.dart';
 /// no account nonce to track. A fixed value keeps proof requests deterministic.
 final BigInt proofInvocationNonce = BigInt.zero;
 
+/// L2 gas limit for a proof invocation.
+///
+/// The prover refuses a zero limit, and says why in as many words:
+///
+///     l2_gas.max_amount must be non-zero, it is the gas limit enforced by the
+///     OS on the transaction. Set this to the value returned by
+///     starknet_estimateFee, or use 100000000 (0x5f5e100) as a safe upper
+///     bound (sufficient for ~1 million Cairo steps).
+///
+/// The upper bound is the right default here rather than an estimate. This
+/// invocation is never broadcast and never pays a fee, so the number only has
+/// to be large enough for the OS to let the execution finish, and a wallet
+/// asking for a fee estimate first would be a round trip spent on nothing.
+const provingL2GasLimit = '0x5f5e100';
+
 /// A resource bound pair for one gas kind.
 class ResourceBound {
   const ResourceBound({required this.maxAmount, required this.maxPricePerUnit});
 
   static const zero = ResourceBound(maxAmount: '0x0', maxPricePerUnit: '0x0');
+
+  /// Enough L2 gas for the pool's own execution, with room to spare.
+  static const provingDefault = ResourceBound(
+    maxAmount: provingL2GasLimit,
+    maxPricePerUnit: '0x0',
+  );
 
   final String maxAmount;
   final String maxPricePerUnit;
@@ -38,7 +59,7 @@ class ResourceBounds {
   const ResourceBounds({
     this.l1Gas = ResourceBound.zero,
     this.l1DataGas = ResourceBound.zero,
-    this.l2Gas = ResourceBound.zero,
+    this.l2Gas = ResourceBound.provingDefault,
   });
 
   final ResourceBound l1Gas;
