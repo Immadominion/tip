@@ -7,14 +7,33 @@ library;
 
 import '../errors.dart';
 
-BigInt _felt(String hex) {
-  final cleaned = hex.startsWith('0x') ? hex.substring(2) : hex;
-  final parsed = BigInt.tryParse(cleaned, radix: 16);
+/// Reads a felt the discovery service sent, in whichever base it chose.
+///
+/// The service is not consistent, and the inconsistency is silent. Identifiers
+/// come back hex-prefixed: channel keys, addresses, tokens, note ids. Numbers
+/// come back as plain decimal: note amounts and salts.
+///
+/// Reading a decimal amount as hex does not fail, it just returns the wrong
+/// number. A one STRK note read that way comes out as 4722.366483 STRK, which
+/// is what this wallet showed until a real shield made the mistake visible.
+BigInt parseServiceFelt(String value) {
+  final trimmed = value.trim();
+  if (trimmed.startsWith('0x') || trimmed.startsWith('0X')) {
+    final parsed = BigInt.tryParse(trimmed.substring(2), radix: 16);
+    if (parsed == null) {
+      throw ProtocolException('Expected a hex felt, got "$value"');
+    }
+    return parsed;
+  }
+
+  final parsed = BigInt.tryParse(trimmed);
   if (parsed == null) {
-    throw ProtocolException('Expected a hex felt, got "$hex"');
+    throw ProtocolException('Expected a decimal felt, got "$value"');
   }
   return parsed;
 }
+
+BigInt _felt(String value) => parseServiceFelt(value);
 
 String feltToHex(BigInt value) => '0x${value.toRadixString(16)}';
 

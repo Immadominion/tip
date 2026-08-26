@@ -367,4 +367,69 @@ void main() {
       );
     });
   });
+
+  _feltBaseTests();
+}
+
+void _feltBaseTests() {
+  group('parseServiceFelt', () {
+    test('reads a hex-prefixed identifier as hex', () {
+      expect(parseServiceFelt('0x10'), equals(BigInt.from(16)));
+      expect(parseServiceFelt('0X10'), equals(BigInt.from(16)));
+    });
+
+    test('reads an unprefixed number as decimal', () {
+      // The bug this exists for: amounts and salts arrive as plain decimal.
+      // Read as hex they do not fail, they come back wrong.
+      expect(
+        parseServiceFelt('1000000000000000000'),
+        equals(BigInt.parse('1000000000000000000')),
+      );
+    });
+
+    test('one STRK stays one STRK', () {
+      // A real note from a real shield. Parsed as hex this reads as
+      // 4722.366483 STRK, which is what the wallet showed before the fix.
+      final oneStrk = BigInt.from(10).pow(18);
+      expect(parseServiceFelt('1000000000000000000'), equals(oneStrk));
+      expect(
+        parseServiceFelt('0x1000000000000000000'),
+        isNot(equals(oneStrk)),
+        reason: 'the same digits in hex are a different number',
+      );
+    });
+
+    test('a decimal salt survives', () {
+      expect(
+        parseServiceFelt('847352467113937274664853351989015054'),
+        equals(BigInt.parse('847352467113937274664853351989015054')),
+      );
+    });
+
+    test('surrounding whitespace is tolerated', () {
+      expect(parseServiceFelt('  0xff '), equals(BigInt.from(255)));
+      expect(parseServiceFelt(' 255 '), equals(BigInt.from(255)));
+    });
+
+    test('nonsense is refused in either base', () {
+      for (final bad in ['', '0x', '0xzz', 'hello', '12ab']) {
+        expect(
+          () => parseServiceFelt(bad),
+          throwsA(isA<ProtocolException>()),
+          reason: '"$bad"',
+        );
+      }
+    });
+
+    test('the error says which base it expected', () {
+      expect(
+        () => parseServiceFelt('0xzz'),
+        throwsA(predicate((e) => '$e'.contains('hex'))),
+      );
+      expect(
+        () => parseServiceFelt('nope'),
+        throwsA(predicate((e) => '$e'.contains('decimal'))),
+      );
+    });
+  });
 }
