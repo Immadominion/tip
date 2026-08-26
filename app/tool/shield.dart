@@ -212,6 +212,7 @@ Future<void> main(List<String> args) async {
   ];
 
   stdout.writeln('actions       ${actions.map((a) => a.kind.name).join(", ")}');
+  tp.assertPhaseOrder(actions);
 
   final problems = simulator.checkSequential(
     actions,

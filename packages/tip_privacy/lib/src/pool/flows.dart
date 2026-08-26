@@ -140,6 +140,9 @@ List<ClientAction> buildUnshield({
   final selection =
       selectNotes(available: available, token: token, amount: amount);
 
+  // Change before the withdrawal, not after. The pool applies actions in phase
+  // order and creating a note is an earlier phase than withdrawing, so the
+  // reverse reverts with ACTIONS_OUT_OF_ORDER.
   return [
     for (final note in selection.notes)
       UseNote(
@@ -147,12 +150,6 @@ List<ClientAction> buildUnshield({
         token: note.token,
         index: note.index,
       ),
-    Withdraw(
-      toAddr: toAddr,
-      token: token,
-      amount: amount,
-      random: random.nextFelt(),
-    ),
     if (selection.change > BigInt.zero)
       CreateEncNote(
         recipientAddr: selfAddr,
@@ -162,6 +159,12 @@ List<ClientAction> buildUnshield({
         index: changeNoteIndex,
         salt: random.nextNoteSalt(),
       ),
+    Withdraw(
+      toAddr: toAddr,
+      token: token,
+      amount: amount,
+      random: random.nextFelt(),
+    ),
   ];
 }
 

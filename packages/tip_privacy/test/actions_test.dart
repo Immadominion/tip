@@ -321,4 +321,115 @@ void main() {
       );
     });
   });
+
+  _phaseOrderTests();
+}
+
+void _phaseOrderTests() {
+  ClientAction note(int index) => CreateEncNote(
+        recipientAddr: BigInt.from(0xaa),
+        recipientPublicKey: BigInt.from(0xbb),
+        token: BigInt.from(0xcc),
+        amount: BigInt.from(10),
+        index: index,
+        salt: BigInt.from(5),
+      );
+
+  final use = UseNote(
+    channelKey: BigInt.from(1),
+    token: BigInt.from(0xcc),
+    index: 0,
+  );
+  final withdraw = Withdraw(
+    toAddr: BigInt.from(0xdd),
+    token: BigInt.from(0xcc),
+    amount: BigInt.from(5),
+    random: BigInt.one,
+  );
+  final deposit = Deposit(token: BigInt.from(0xcc), amount: BigInt.from(5));
+
+  group('phases', () {
+    test('are not the variant order', () {
+      // Creating a note is declared before spending one, and applied after it.
+      // Reading the enum order as the phase order is the trap this guards.
+      expect(
+        ClientActionKind.createEncNote.variantIndex,
+        lessThan(ClientActionKind.useNote.variantIndex),
+      );
+      expect(
+        ClientActionKind.createEncNote.phase,
+        greaterThan(ClientActionKind.useNote.phase),
+      );
+    });
+
+    test('both note kinds share a phase', () {
+      expect(
+        ClientActionKind.createOpenNote.phase,
+        equals(ClientActionKind.createEncNote.phase),
+      );
+    });
+
+    test('run in the contract order', () {
+      expect(
+        [
+          ClientActionKind.setViewingKey,
+          ClientActionKind.openChannel,
+          ClientActionKind.openSubchannel,
+          ClientActionKind.deposit,
+          ClientActionKind.useNote,
+          ClientActionKind.createEncNote,
+          ClientActionKind.withdraw,
+          ClientActionKind.invokeExternal,
+        ].map((k) => k.phase).toList(),
+        equals([0, 1, 2, 3, 4, 5, 6, 7]),
+      );
+    });
+  });
+
+  group('assertPhaseOrder', () {
+    test('accepts a shield', () {
+      expect(() => assertPhaseOrder([deposit, note(0)]), returnsNormally);
+    });
+
+    test('accepts a transfer', () {
+      expect(
+        () => assertPhaseOrder([use, note(0), note(1)]),
+        returnsNormally,
+      );
+    });
+
+    test('accepts an unshield with change before the withdrawal', () {
+      expect(() => assertPhaseOrder([use, note(0), withdraw]), returnsNormally);
+    });
+
+    test('refuses change after the withdrawal', () {
+      // The exact batch that reverted on chain with ACTIONS_OUT_OF_ORDER.
+      expect(
+        () => assertPhaseOrder([use, withdraw, note(0)]),
+        throwsA(isA<ProtocolException>()),
+      );
+    });
+
+    test('the message names both actions and the rule', () {
+      expect(
+        () => assertPhaseOrder([withdraw, deposit]),
+        throwsA(predicate((e) =>
+            '$e'.contains('deposit') &&
+            '$e'.contains('withdraw') &&
+            '$e'.contains('phase order'))),
+      );
+    });
+
+    test('an empty or single-action batch is fine', () {
+      expect(() => assertPhaseOrder([]), returnsNormally);
+      expect(() => assertPhaseOrder([withdraw]), returnsNormally);
+    });
+
+    test('repeats of one phase are fine', () {
+      expect(
+        () => assertPhaseOrder([note(0), note(1), note(2)]),
+        returnsNormally,
+      );
+    });
+  });
 }

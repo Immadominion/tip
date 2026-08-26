@@ -30,6 +30,27 @@ enum ClientActionKind {
   computeAndInvoke;
 
   int get variantIndex => index;
+
+  /// The phase the contract sorts this action into.
+  ///
+  /// A batch must be in non-decreasing phase order or `apply_actions` reverts
+  /// with `ACTIONS_OUT_OF_ORDER`, which names neither the offending action nor
+  /// the rule. Note that the phases are *not* the variant order: creating a
+  /// note comes after spending one, while the enum declares it before.
+  ///
+  /// From `ClientActionImpl` in `actions.cairo`.
+  int get phase => switch (this) {
+        ClientActionKind.setViewingKey => 0,
+        ClientActionKind.openChannel => 1,
+        ClientActionKind.openSubchannel => 2,
+        ClientActionKind.deposit => 3,
+        ClientActionKind.useNote => 4,
+        ClientActionKind.createEncNote => 5,
+        ClientActionKind.createOpenNote => 5,
+        ClientActionKind.withdraw => 6,
+        ClientActionKind.invokeExternal => 7,
+        ClientActionKind.computeAndInvoke => 7,
+      };
 }
 
 /// One action in a private transaction.
@@ -354,3 +375,30 @@ List<BigInt> encodeActions(List<ClientAction> actions) => [
       BigInt.from(actions.length),
       for (final action in actions) ...action.encode(),
     ];
+
+
+/// Checks a batch is in the order the contract will accept.
+///
+/// The pool walks the batch once and refuses any action whose phase is below
+/// the one before it. Catching that here costs nothing; catching it from the
+/// prover costs a proof, and the revert says only `ACTIONS_OUT_OF_ORDER`
+/// without naming which action broke the rule.
+///
+/// Deliberately a check rather than a sort. A batch in the wrong order usually
+/// means the caller believes something untrue about the protocol, and quietly
+/// rearranging it hides that until it matters somewhere else.
+void assertPhaseOrder(List<ClientAction> actions) {
+  var phase = 0;
+  for (var i = 0; i < actions.length; i++) {
+    final kind = actions[i].kind;
+    if (kind.phase < phase) {
+      final previous = actions[i - 1].kind;
+      throw ProtocolException(
+        'Actions are out of order: ${kind.name} (phase ${kind.phase}) comes '
+        'after ${previous.name} (phase ${previous.phase}). The pool applies '
+        'them in phase order and refuses a batch that goes backwards.',
+      );
+    }
+    phase = kind.phase;
+  }
+}

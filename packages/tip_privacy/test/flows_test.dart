@@ -147,16 +147,59 @@ void main() {
         random: _FixedRandom(),
       );
 
+      // Change before the withdrawal. The pool applies actions in phase order
+      // and creating a note is an earlier phase than withdrawing, so the other
+      // way round reverts with ACTIONS_OUT_OF_ORDER. This test asserted the
+      // wrong order until a real unshield proved it on chain.
       expect(actions, hasLength(3));
       expect(actions[0], isA<UseNote>());
-      expect(actions[1], isA<Withdraw>());
-      expect(actions[2], isA<CreateEncNote>());
+      expect(actions[1], isA<CreateEncNote>());
+      expect(actions[2], isA<Withdraw>());
+      expect(() => assertPhaseOrder(actions), returnsNormally);
 
-      expect((actions[1] as Withdraw).amount, equals(_b(60)));
-      final change = actions[2] as CreateEncNote;
+      expect((actions[2] as Withdraw).amount, equals(_b(60)));
+      final change = actions[1] as CreateEncNote;
       expect(change.amount, equals(_b(40)));
       expect(change.recipientAddr, equals(_b(0x123)));
       expect(change.index, equals(7));
+    });
+
+    test('every flow it builds is in an order the pool accepts', () {
+      // The check the library now exposes, applied to the library's own output.
+      final unshield = buildUnshield(
+        available: [_note(100)],
+        token: _token,
+        amount: _b(60),
+        toAddr: _b(0xaaa),
+        selfAddr: _b(0x123),
+        selfPublicKey: _b(0xabc),
+        changeNoteIndex: 7,
+        random: _FixedRandom(),
+      );
+      final transfer = buildPrivateTransfer(
+        available: [_note(100)],
+        token: _token,
+        amount: _b(60),
+        recipientAddr: _b(0xaaa),
+        recipientPublicKey: _b(0xbbb),
+        recipientNoteIndex: 0,
+        selfAddr: _b(0x123),
+        selfPublicKey: _b(0xabc),
+        changeNoteIndex: 7,
+        random: _FixedRandom(),
+      );
+      final shield = buildShield(
+        token: _token,
+        amount: _b(10),
+        recipientAddr: _b(0x123),
+        recipientPublicKey: _b(0xabc),
+        noteIndex: 0,
+        random: _FixedRandom(),
+      );
+
+      for (final batch in [unshield, transfer, shield]) {
+        expect(() => assertPhaseOrder(batch), returnsNormally);
+      }
     });
 
     test('omits the change note on an exact spend', () {

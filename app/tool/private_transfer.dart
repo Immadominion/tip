@@ -207,6 +207,10 @@ Future<void> main(List<String> args) async {
 
   stdout.writeln('actions     ${actions.map((a) => a.kind.name).join(", ")}');
 
+  // Cheap here, expensive from the prover: an out-of-order batch costs a proof
+  // and comes back saying only ACTIONS_OUT_OF_ORDER.
+  tp.assertPhaseOrder(actions);
+
   if (!submit) {
     batch.abandon();
     stdout.writeln('\nStopping before proving. Pass --submit to send it.');
