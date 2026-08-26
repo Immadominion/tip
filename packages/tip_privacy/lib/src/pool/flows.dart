@@ -211,3 +211,43 @@ List<ClientAction> buildPrivateTransfer({
       ),
   ];
 }
+
+/// Opens the channel and subchannel a note needs before it can exist.
+///
+/// A note cannot be created into nothing. `create_enc_note` asserts the
+/// subchannel exists, a subchannel needs a channel, and a channel needs both
+/// parties registered. For a first shield, where the wallet is paying itself,
+/// all three have to be arranged in the same batch as the deposit.
+///
+/// Returns only what is actually missing, so this is safe to call every time
+/// and costs nothing once the setup is done. Opening a channel that already
+/// exists reverts the whole transaction.
+List<ClientAction> buildChannelSetup({
+  required BigInt recipientAddr,
+  required BigInt recipientPublicKey,
+  required BigInt channelKey,
+  required BigInt token,
+  required int channelIndex,
+  required int subchannelIndex,
+  required RandomSource random,
+  bool channelExists = false,
+  bool subchannelExists = false,
+}) =>
+    [
+      if (!channelExists)
+        OpenChannel(
+          recipientAddr: recipientAddr,
+          index: channelIndex,
+          random: random.nextFelt(),
+          salt: random.nextFelt(),
+        ),
+      if (!subchannelExists)
+        OpenSubchannel(
+          recipientAddr: recipientAddr,
+          recipientPublicKey: recipientPublicKey,
+          channelKey: channelKey,
+          index: subchannelIndex,
+          token: token,
+          salt: random.nextFelt(),
+        ),
+    ];

@@ -295,4 +295,57 @@ void main() {
       expect(encoded[1], equals(_b(6))); // UseNote
     });
   });
+
+  _channelSetupTests();
+}
+
+void _channelSetupTests() {
+  final recipient = BigInt.from(0xabc);
+  final recipientKey = BigInt.from(0xdef);
+  final channelKey = BigInt.from(0x111);
+  final token = BigInt.from(0x222);
+
+  List<ClientAction> setup({
+    bool channelExists = false,
+    bool subchannelExists = false,
+  }) =>
+      buildChannelSetup(
+        recipientAddr: recipient,
+        recipientPublicKey: recipientKey,
+        channelKey: channelKey,
+        token: token,
+        channelIndex: 0,
+        subchannelIndex: 0,
+        random: _FixedRandom(),
+        channelExists: channelExists,
+        subchannelExists: subchannelExists,
+      );
+
+  group('buildChannelSetup', () {
+    test('opens both when neither exists', () {
+      final actions = setup();
+      expect(
+        actions.map((a) => a.kind),
+        equals([ClientActionKind.openChannel, ClientActionKind.openSubchannel]),
+      );
+    });
+
+    test('opens only the subchannel when the channel is already there', () {
+      // Opening a channel that exists reverts the whole transaction, taking
+      // the deposit with it.
+      final actions = setup(channelExists: true);
+      expect(actions.single.kind, equals(ClientActionKind.openSubchannel));
+    });
+
+    test('opens nothing once both exist', () {
+      expect(setup(channelExists: true, subchannelExists: true), isEmpty);
+    });
+
+    test('the subchannel carries the channel key and the token', () {
+      final subchannel = setup(channelExists: true).single as OpenSubchannel;
+      expect(subchannel.channelKey, equals(channelKey));
+      expect(subchannel.token, equals(token));
+      expect(subchannel.recipientPublicKey, equals(recipientKey));
+    });
+  });
 }

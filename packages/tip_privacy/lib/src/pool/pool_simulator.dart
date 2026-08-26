@@ -304,3 +304,35 @@ String _short(BigInt value) {
   final hex = value.toRadixString(16);
   return hex.length <= 10 ? '0x$hex' : '0x${hex.substring(0, 6)}...';
 }
+
+/// Whether the slot with this id is already occupied.
+///
+/// Implemented by whatever can read the pool: a note is present when
+/// `get_note` returns a non-zero packed value, a subchannel when its info has
+/// a non-zero salt, and so on.
+typedef SlotProbe = Future<bool> Function(BigInt id);
+
+/// How many slots a sequence already holds.
+///
+/// Slots are dense and append-only, so the count is the first index that is
+/// empty. This walks forward from zero rather than binary searching: the
+/// sequences a wallet cares about are short, a linear walk is obviously
+/// correct, and a binary search over a predicate that is only monotonic
+/// because of an invariant elsewhere is a subtle thing to get wrong for the
+/// sake of a few calls.
+///
+/// [limit] bounds the walk so a probe that answers "occupied" forever cannot
+/// hang the wallet.
+Future<int> countOccupiedSlots({
+  required SlotProbe exists,
+  required BigInt Function(int index) idFor,
+  int limit = 512,
+}) async {
+  for (var index = 0; index < limit; index++) {
+    if (!await exists(idFor(index))) return index;
+  }
+  throw ProtocolException(
+    'Found $limit occupied slots in a row without reaching the end. Either '
+    'the sequence is longer than this wallet supports or the probe is wrong.',
+  );
+}

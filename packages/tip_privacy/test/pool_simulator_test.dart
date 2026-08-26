@@ -284,4 +284,59 @@ void main() {
       );
     });
   });
+
+  _slotCountingTests();
+}
+
+void _slotCountingTests() {
+  group('countOccupiedSlots', () {
+    BigInt idFor(int index) => BigInt.from(1000 + index);
+
+    SlotProbe upTo(int count, {List<BigInt>? seen}) => (id) async {
+          seen?.add(id);
+          return id.toInt() - 1000 < count;
+        };
+
+    test('an empty sequence counts zero', () async {
+      expect(
+        await countOccupiedSlots(exists: upTo(0), idFor: idFor),
+        equals(0),
+      );
+    });
+
+    test('it counts up to the first empty slot', () async {
+      expect(
+        await countOccupiedSlots(exists: upTo(5), idFor: idFor),
+        equals(5),
+      );
+    });
+
+    test('it stops at the first gap rather than reading past it', () async {
+      // Slots are dense, so the first empty one is the end. Probing further
+      // would be reading state the contract guarantees is not there.
+      final seen = <BigInt>[];
+      await countOccupiedSlots(exists: upTo(3, seen: seen), idFor: idFor);
+      expect(seen, hasLength(4), reason: 'three occupied, then one empty');
+      expect(seen.last, equals(idFor(3)));
+    });
+
+    test('a probe that never says empty is bounded rather than hanging',
+        () async {
+      expect(
+        () => countOccupiedSlots(
+          exists: (_) async => true,
+          idFor: idFor,
+          limit: 8,
+        ),
+        throwsA(isA<ProtocolException>()),
+      );
+    });
+
+    test('the limit is a ceiling, not a target', () async {
+      expect(
+        await countOccupiedSlots(exists: upTo(2), idFor: idFor, limit: 8),
+        equals(2),
+      );
+    });
+  });
 }
