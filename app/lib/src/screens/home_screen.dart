@@ -21,6 +21,7 @@ import '../chain/address.dart';
 import '../chain/amount.dart';
 import '../chain/network.dart';
 import '../auth/auth_service.dart';
+import '../privacy/privacy_controller.dart';
 import '../security/app_lock.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
@@ -41,6 +42,7 @@ class HomeScreen extends StatefulWidget {
     required this.onWalletErased,
     this.lock,
     this.auth,
+    this.privacy,
   });
 
   final WalletController controller;
@@ -53,6 +55,9 @@ class HomeScreen extends StatefulWidget {
 
   /// Passed through to settings. Null when sign-in is not configured.
   final AuthService? auth;
+
+  /// The shielded side. Null in tests that only exercise the public wallet.
+  final PrivacyController? privacy;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -68,12 +73,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _wallet.startPolling();
+    widget.privacy?.startPolling();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _wallet.stopPolling();
+    widget.privacy?.stopPolling();
     super.dispose();
   }
 
@@ -84,8 +91,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // way in rather than continuing to poll on the way out.
     if (state == AppLifecycleState.resumed) {
       _wallet.startPolling();
+      widget.privacy?.startPolling();
     } else if (state == AppLifecycleState.paused) {
       _wallet.stopPolling();
+      widget.privacy?.stopPolling();
     }
   }
 
@@ -127,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ),
                   const SizedBox(height: TipTheme.spaceLg),
-                  _Hero(view: _view, wallet: _wallet),
+                  _Hero(view: _view, wallet: _wallet, privacy: widget.privacy),
                   const SizedBox(height: TipTheme.spaceXl),
                   _Actions(wallet: _wallet),
                   const SizedBox(height: TipTheme.spaceSm),
@@ -217,28 +226,18 @@ class _NetworkBanner extends StatelessWidget {
 }
 
 class _Hero extends StatelessWidget {
-  const _Hero({required this.view, required this.wallet});
+  const _Hero({required this.view, required this.wallet, this.privacy});
 
   final BalanceView view;
   final WalletController wallet;
+  final PrivacyController? privacy;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
 
     if (view == BalanceView.private) {
-      return Column(
-        children: [
-          Text('Not available yet', style: text.titleLarge),
-          const SizedBox(height: TipTheme.spaceXs),
-          Text(
-            'Reading a shielded balance needs the pool. Until then this says '
-            'nothing rather than showing you a zero it cannot vouch for.',
-            style: text.bodyMedium,
-            textAlign: TextAlign.center,
-          ),
-        ],
-      );
+      return _PrivateHero(privacy: privacy);
     }
 
     if (!wallet.hasLoaded) {
@@ -268,6 +267,111 @@ class _Hero extends StatelessWidget {
           ),
           textAlign: TextAlign.center,
         ),
+      ],
+    );
+  }
+}
+
+/// The shielded balance, or the reason there is not one.
+///
+/// Every branch here says something different on purpose. "Not set up",
+/// "cannot reach the pool" and "you have nothing" are three unrelated
+/// situations, and a wallet that renders all of them as a zero teaches people
+/// to read a zero as noise.
+class _PrivateHero extends StatelessWidget {
+  const _PrivateHero({required this.privacy});
+
+  final PrivacyController? privacy;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = privacy;
+
+    if (controller == null || !controller.isConfigured) {
+      return const _Explain(
+        title: 'Not available in this build',
+        body: 'This copy of tip was built without a privacy pool to talk to.',
+      );
+    }
+
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => switch (controller.state) {
+        PrivacyState.unconfigured => const _Explain(
+            title: 'Not available in this build',
+            body: 'This copy of tip was built without a privacy pool.',
+          ),
+        PrivacyState.unregistered => const _Explain(
+            title: 'Not set up yet',
+            body: 'Shielding needs a viewing key registered with the pool. '
+                'It is a one time step and costs a small fee.',
+          ),
+        // A wallet that has read the pool before keeps showing what it read,
+        // labelled stale. One that never has says the balance is unknown,
+        // which is different from saying it is zero.
+        PrivacyState.unreachable => controller.hasLoaded
+            ? _Amount(
+                amount: controller.total,
+                note: 'Last known. The pool could not be reached just now.',
+                tone: TipPalette.warning,
+              )
+            : const _Explain(
+                title: 'Cannot reach the pool',
+                body: 'The balance is unknown rather than zero. Pull to retry.',
+                tone: TipPalette.negative,
+              ),
+        PrivacyState.ready => _Amount(
+            amount: controller.total,
+            note: 'Shielded. Visible only to you.',
+          ),
+      },
+    );
+  }
+}
+
+class _Amount extends StatelessWidget {
+  const _Amount({required this.amount, required this.note, this.tone});
+
+  final TokenAmount amount;
+  final String note;
+  final Color? tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Column(
+      children: [
+        Text(amount.format(), style: text.displayLarge),
+        const SizedBox(height: TipTheme.spaceXs),
+        Text(
+          '${amount.token.symbol}. $note',
+          style: text.bodyMedium?.copyWith(color: tone),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+class _Explain extends StatelessWidget {
+  const _Explain({required this.title, required this.body, this.tone});
+
+  final String title;
+  final String body;
+  final Color? tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Column(
+      children: [
+        Text(
+          title,
+          style: text.titleLarge?.copyWith(color: tone),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: TipTheme.spaceXs),
+        Text(body, style: text.bodyMedium, textAlign: TextAlign.center),
       ],
     );
   }

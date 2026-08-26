@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../activity/activity_store.dart';
 import '../links/incoming_links.dart';
+import '../privacy/privacy_controller.dart';
 import '../auth/auth_service.dart';
 import '../security/app_lock.dart';
 import '../theme/palette.dart';
@@ -71,6 +72,7 @@ class _BootScreenState extends State<BootScreen> with WidgetsBindingObserver {
 
   _Phase _phase = _Phase.checking;
   WalletController? _controller;
+  PrivacyController? _privacy;
   String? _error;
 
   /// A tip link that arrived before there was a wallet to put it in.
@@ -97,6 +99,7 @@ class _BootScreenState extends State<BootScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_linkSubscription?.cancel());
+    _privacy?.dispose();
     _controller?.dispose();
     super.dispose();
   }
@@ -200,6 +203,10 @@ class _BootScreenState extends State<BootScreen> with WidgetsBindingObserver {
         activityStore: widget.activityStore,
         walletStore: _store,
       );
+      _privacy = PrivacyController(
+        keys: controller.keys,
+        network: controller.network,
+      );
       // The lock goes in front of an existing wallet only. A wallet created or
       // restored in this session was just proven to belong to whoever is
       // holding the phone.
@@ -232,6 +239,10 @@ class _BootScreenState extends State<BootScreen> with WidgetsBindingObserver {
         activityStore: widget.activityStore,
         walletStore: _store,
       );
+      _privacy = PrivacyController(
+        keys: _controller!.keys,
+        network: _controller!.network,
+      );
       _phase = _Phase.ready;
     });
     _openPendingClaim();
@@ -243,11 +254,14 @@ class _BootScreenState extends State<BootScreen> with WidgetsBindingObserver {
   /// a wallet that no longer exists on this device.
   void _forget() {
     final gone = _controller;
+    final gonePrivacy = _privacy;
     setState(() {
       _controller = null;
+      _privacy = null;
       _phase = _Phase.onboarding;
     });
     gone?.dispose();
+    gonePrivacy?.dispose();
   }
 
   @override
@@ -266,6 +280,7 @@ class _BootScreenState extends State<BootScreen> with WidgetsBindingObserver {
             onWalletErased: _forget,
             lock: _lock,
             auth: _auth,
+            privacy: _privacy,
           ),
         _Phase.failed => _Failed(message: _error!, onRetry: _load),
       };
