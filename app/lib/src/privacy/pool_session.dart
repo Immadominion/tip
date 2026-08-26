@@ -1,0 +1,437 @@
+/// One wallet's connection to the STRK20 pool.
+///
+/// Every private operation follows the same four steps: read what the pool
+/// already holds, build the actions, prove them, and submit the compiled
+/// result. This is that sequence, with the parts that are easy to get wrong
+/// written down once rather than at each call site.
+///
+/// The awkward details it hides:
+///
+/// A proof must be based on a block behind the head, because the node refuses
+/// one that is too recent and blocks keep arriving while the proof is built.
+///
+/// The signature covers the proof facts. A transaction signed without them is
+/// signed over a different message, and the account rejects it saying only
+/// "invalid signature".
+///
+/// The pool takes both a deposit and its fee with `transfer_from`, so anything
+/// that moves value in has to approve first, in the same multicall.
+library;
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:starknet/starknet.dart';
+import 'package:starknet_provider/starknet_provider.dart';
+import 'package:tip_privacy/tip_privacy.dart' as tp;
+
+import '../wallet/wallet.dart';
+import 'pool_config.dart';
+
+/// Something the pool or one of its services refused.
+class PoolException implements Exception {
+  const PoolException(this.message, {this.detail});
+
+  final String message;
+  final String? detail;
+
+  @override
+  String toString() => detail == null ? message : '$message: $detail';
+}
+
+/// What a completed private operation produced.
+class PoolSubmission {
+  const PoolSubmission({required this.transactionHash, required this.proof});
+
+  final Felt transactionHash;
+  final tp.ProofResult proof;
+}
+
+class PoolSession {
+  PoolSession({
+    required this.config,
+    required this.keys,
+    required this.chainId,
+    required this.feeToken,
+  });
+
+  final PoolConfig config;
+  final WalletKeys keys;
+  final Felt chainId;
+
+  /// The token the pool's own fee is denominated in.
+  final BigInt feeToken;
+
+  BigInt get _self => keys.accountAddress.toBigInt();
+  BigInt get _viewingKey => keys.viewingKey;
+
+  // ---- reading ---------------------------------------------------------
+
+  /// The public key the pool holds for [address], or zero when unregistered.
+  Future<BigInt> registeredPublicKey(BigInt address) async =>
+      _felt((await call('get_public_key', [_hex(address)])).first);
+
+  Future<bool> isRegistered(BigInt address) async =>
+      (await registeredPublicKey(address)) != BigInt.zero;
+
+  Future<BigInt> feeAmount() async =>
+      _felt((await call('get_fee_amount', const [])).first);
+
+  Future<bool> channelExists(BigInt marker) async =>
+      _felt((await call('channel_exists', [_hex(marker)])).first) !=
+      BigInt.zero;
+
+  Future<bool> subchannelExists(BigInt marker) async =>
+      _felt((await call('subchannel_exists', [_hex(marker)])).first) !=
+      BigInt.zero;
+
+  Future<bool> nullifierExists(BigInt nullifier) async =>
+      _felt((await call('nullifier_exists', [_hex(nullifier)])).first) !=
+      BigInt.zero;
+
+  /// How many notes a channel already holds for a token.
+  Future<int> noteCount({
+    required BigInt channelKey,
+    required BigInt token,
+  }) =>
+      tp.countOccupiedSlots(
+        exists: (id) async =>
+            _felt((await call('get_note', [_hex(id)])).first) != BigInt.zero,
+        idFor: (index) => tp.computeNoteId(
+          channelKey: channelKey,
+          token: token,
+          index: index,
+        ),
+      );
+
+  Future<int> subchannelCount(BigInt channelKey) => tp.countOccupiedSlots(
+        exists: (id) async =>
+            _felt((await call('get_subchannel_info', [_hex(id)])).first) !=
+            BigInt.zero,
+        idFor: (index) =>
+            tp.computeSubchannelId(channelKey: channelKey, index: index),
+      );
+
+  Future<int> outgoingChannelCount() => tp.countOccupiedSlots(
+        exists: (id) async =>
+            _felt(
+              (await call('get_outgoing_channel_info', [_hex(id)])).first,
+            ) !=
+            BigInt.zero,
+        idFor: (index) => tp.computeOutgoingChannelId(
+          senderAddr: _self,
+          senderPrivateKey: _viewingKey,
+          index: index,
+        ),
+      );
+
+  /// The channel this wallet pays [recipient] through, and its markers.
+  ///
+  /// Derived, not looked up. A channel key is a hash of both parties, so the
+  /// sender can compute it before the channel exists, which is what makes
+  /// opening it in the same batch as the first note possible.
+  ChannelRef channelTo({
+    required BigInt recipient,
+    required BigInt recipientPublicKey,
+    required BigInt token,
+  }) {
+    final key = tp.computeChannelKey(
+      senderAddr: _self,
+      senderPrivateKey: _viewingKey,
+      recipientAddr: recipient,
+      recipientPublicKey: recipientPublicKey,
+    );
+    return ChannelRef(
+      key: key,
+      recipient: recipient,
+      recipientPublicKey: recipientPublicKey,
+      token: token,
+      channelMarker: tp.computeChannelMarker(
+        channelKey: key,
+        senderAddr: _self,
+        recipientAddr: recipient,
+        recipientPublicKey: recipientPublicKey,
+      ),
+      subchannelMarker: tp.computeSubchannelMarker(
+        channelKey: key,
+        recipientAddr: recipient,
+        recipientPublicKey: recipientPublicKey,
+        token: token,
+      ),
+    );
+  }
+
+  // ---- proving ---------------------------------------------------------
+
+  /// Proves [actions], based on a block far enough behind the head.
+  Future<tp.ProofResult> prove(List<tp.ClientAction> actions) async {
+    if (actions.isEmpty) {
+      throw const PoolException('There is nothing to prove');
+    }
+
+    final inner = tp.compileActionsCalldata(
+      userAddress: _self,
+      viewingKey: _viewingKey,
+      actions: actions,
+    );
+
+    const bounds = tp.ResourceBounds(
+      l2Gas: tp.ResourceBound(
+        maxAmount: tp.provingL2GasLimit,
+        maxPricePerUnit: '0x0',
+      ),
+    );
+
+    final hash = tp.provedInvokeTransactionHash(
+      senderAddress: config.poolAddress,
+      calldata: tp.wrapAsExecuteCalldata(
+        to: config.poolAddress,
+        selector: getSelectorByName('compile_actions').toBigInt(),
+        calldata: inner,
+      ),
+      chainId: chainId.toBigInt(),
+      nonce: tp.proofInvocationNonce,
+      resourceBounds: bounds,
+      proofFacts: const [],
+    );
+
+    final signature =
+        await StarkSigner(privateKey: keys.accountPrivateKey)
+            .sign(hash, BigInt.from(32));
+
+    final invocation = tp.buildProofInvocation(
+      poolAddress: config.poolAddress,
+      userAddress: _self,
+      viewingKey: _viewingKey,
+      actions: actions,
+      compileActionsSelector:
+          getSelectorByName('compile_actions').toBigInt(),
+      signature: signature.map((f) => f.toBigInt()).toList(),
+      resourceBounds: bounds,
+    );
+
+    final head = await blockNumber();
+    final client = tp.ProvingClient(
+      transport: tp.PlainJsonTransport(baseUrl: config.provingUrl),
+    );
+    try {
+      return await client.proveTransaction(
+        blockId: {'block_number': tp.provingBlockFor(head)},
+        transaction: invocation.toJson(),
+      );
+    } finally {
+      client.close();
+    }
+  }
+
+  // ---- submitting ------------------------------------------------------
+
+  /// Applies a proof on chain.
+  ///
+  /// [approve] is what the pool is allowed to take with `transfer_from`: its
+  /// own fee, plus whatever a deposit in the batch moves in. Zero for
+  /// operations that only move value around inside the pool.
+  Future<PoolSubmission> submit({
+    required tp.ProofResult proof,
+    required BigInt approve,
+  }) async {
+    final applyCalldata = tp.applyActionsCalldata(
+      messagePayload: proof.serverActionsFor(config.poolHex),
+      screening: proof.screeningSignature == null
+          ? null
+          : tp.ScreeningAttestationFelts(
+              issuedAt: _hex(BigInt.from(proof.screeningSignature!.issuedAt)),
+              r: proof.screeningSignature!.r,
+              s: proof.screeningSignature!.s,
+            ),
+    );
+
+    final calls = <FunctionCall>[
+      if (approve > BigInt.zero)
+        FunctionCall(
+          contractAddress: Felt(feeToken),
+          entryPointSelector: getSelectorByName('approve'),
+          calldata: [Felt(config.poolAddress), Felt(approve), Felt.zero],
+        ),
+      FunctionCall(
+        contractAddress: Felt(config.poolAddress),
+        entryPointSelector: getSelectorByName('apply_actions'),
+        calldata: applyCalldata.map(Felt.fromHexString).toList(),
+      ),
+    ];
+
+    final nonce = Felt.fromHexString(
+      await _rpcResult('starknet_getNonce', [
+        'latest',
+        keys.accountAddress.toHexString(),
+      ]) as String,
+    );
+
+    final bounds = await _submissionBounds();
+    final calldata =
+        functionCallsToCalldata(functionCalls: calls, useLegacyCalldata: false);
+
+    // Over our own hash, because the proof facts belong inside it.
+    final hash = tp.provedInvokeTransactionHash(
+      senderAddress: _self,
+      calldata: calldata.map((f) => f.toBigInt()).toList(),
+      chainId: chainId.toBigInt(),
+      nonce: nonce.toBigInt(),
+      resourceBounds: bounds,
+      proofFacts: proof.proofFacts.map(_felt).toList(),
+    );
+    final signature = await StarkSigner(privateKey: keys.accountPrivateKey)
+        .sign(hash, BigInt.from(32));
+
+    final response = await _rpc('starknet_addInvokeTransaction', [
+      {
+        'type': 'INVOKE',
+        'version': '0x3',
+        'sender_address': keys.accountAddress.toHexString(),
+        'calldata': calldata.map((f) => f.toHexString()).toList(),
+        'signature': signature.map((f) => f.toHexString()).toList(),
+        'nonce': nonce.toHexString(),
+        'resource_bounds': bounds.toJson(),
+        'tip': tp.requiredTip,
+        'paymaster_data': <String>[],
+        'account_deployment_data': <String>[],
+        'nonce_data_availability_mode': 'L1',
+        'fee_data_availability_mode': 'L1',
+        ...tp.proofFields(proofFacts: proof.proofFacts, proof: proof.proof),
+      },
+    ]);
+
+    if (response['error'] != null) {
+      throw PoolException(
+        'The node refused the transaction',
+        detail: jsonEncode(response['error']),
+      );
+    }
+
+    return PoolSubmission(
+      transactionHash:
+          Felt.fromHexString((response['result'] as Map)['transaction_hash'] as String),
+      proof: proof,
+    );
+  }
+
+  /// Waits for a submitted transaction to settle.
+  Future<String> awaitSettled(
+    Felt hash, {
+    Duration timeout = const Duration(minutes: 5),
+    Duration interval = const Duration(seconds: 5),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final response =
+          await _rpc('starknet_getTransactionStatus', [hash.toHexString()]);
+      final result = response['result'];
+      if (result is Map) {
+        final execution = result['execution_status'] as String?;
+        if (execution != null) return execution;
+      }
+      await Future<void>.delayed(interval);
+    }
+    return 'PENDING';
+  }
+
+  // ---- plumbing --------------------------------------------------------
+
+  Future<int> blockNumber() async =>
+      ((await _rpcResult('starknet_blockNumber', const <Object>[])) as num)
+          .toInt();
+
+  /// A read-only call on the pool.
+  Future<List<String>> call(String selector, List<String> calldata) async {
+    final result = await _rpcResult('starknet_call', [
+      {
+        'contract_address': config.poolHex,
+        'entry_point_selector': getSelectorByName(selector).toHexString(),
+        'calldata': calldata,
+      },
+      'latest',
+    ]);
+    return (result as List).cast<String>();
+  }
+
+  /// Ceilings for a proved submission.
+  ///
+  /// Deliberately generous. Verifying a proof is heavy, the account pays what
+  /// execution uses rather than the ceiling, and a transaction rejected for a
+  /// low ceiling wastes a proof that took the better part of a minute.
+  Future<tp.ResourceBounds> _submissionBounds() async {
+    final header =
+        await _rpcResult('starknet_getBlockWithTxHashes', ['latest'])
+            as Map<String, dynamic>;
+    String price(String key) =>
+        ((header[key] as Map<String, dynamic>?)?['price_in_fri'] as String?) ??
+        '0x1';
+
+    return tp.ResourceBounds(
+      l1Gas: tp.ResourceBound(
+        maxAmount: '0x30d40',
+        maxPricePerUnit: price('l1_gas_price'),
+      ),
+      l1DataGas: tp.ResourceBound(
+        maxAmount: '0x30d40',
+        maxPricePerUnit: price('l1_data_gas_price'),
+      ),
+      l2Gas: tp.ResourceBound(
+        maxAmount: '0x3b9aca00',
+        maxPricePerUnit: price('l2_gas_price'),
+      ),
+    );
+  }
+
+  Future<Object?> _rpcResult(String method, Object params) async {
+    final response = await _rpc(method, params);
+    if (response['error'] != null) {
+      throw PoolException(
+        'The node refused $method',
+        detail: jsonEncode(response['error']),
+      );
+    }
+    return response['result'];
+  }
+
+  Future<Map<String, dynamic>> _rpc(String method, Object params) async {
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(config.rpcUrl);
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode({
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': method,
+        'params': params,
+      }));
+      final response = await request.close();
+      return jsonDecode(await response.transform(utf8.decoder).join())
+          as Map<String, dynamic>;
+    } finally {
+      client.close();
+    }
+  }
+}
+
+/// A channel, and the markers that say whether it and its subchannel exist.
+class ChannelRef {
+  const ChannelRef({
+    required this.key,
+    required this.recipient,
+    required this.recipientPublicKey,
+    required this.token,
+    required this.channelMarker,
+    required this.subchannelMarker,
+  });
+
+  final BigInt key;
+  final BigInt recipient;
+  final BigInt recipientPublicKey;
+  final BigInt token;
+  final BigInt channelMarker;
+  final BigInt subchannelMarker;
+}
+
+BigInt _felt(String hex) => BigInt.parse(hex.replaceFirst('0x', ''), radix: 16);
+String _hex(BigInt value) => '0x${value.toRadixString(16)}';

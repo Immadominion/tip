@@ -2,6 +2,8 @@
 /// cover pagination, reorg handling, and error mapping without a network.
 library;
 
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:test/test.dart';
 import 'package:tip_privacy/tip_privacy.dart';
 
@@ -430,6 +432,118 @@ void _feltBaseTests() {
         () => parseServiceFelt('nope'),
         throwsA(predicate((e) => '$e'.contains('decimal'))),
       );
+    });
+  });
+
+  _retryTests();
+}
+
+void _retryTests() {
+  group('riding out a service that is briefly down', () {
+    /// Answers with [statuses] in order, then 200 forever.
+    http.Client flaky(List<int> statuses, {List<String>? seen}) {
+      var call = 0;
+      return MockClient((request) async {
+        seen?.add(request.url.path);
+        final status = call < statuses.length ? statuses[call] : 200;
+        call++;
+        return http.Response(status == 200 ? '{"status":"OK"}' : 'nope', status);
+      });
+    }
+
+    Future<void> noSleep(Duration _) async {}
+
+    test('a 502 is retried rather than surfaced', () async {
+      // The live service returns 502 with "try again in 30 seconds" while it
+      // restarts. A balance that vanishes because a server was deploying is a
+      // balance the user stops trusting.
+      final transport = PlainJsonTransport(
+        baseUrl: Uri.parse('https://example.test'),
+        client: flaky([502, 502]),
+        sleep: noSleep,
+      );
+      expect(await transport.get('/health'), equals({'status': 'OK'}));
+    });
+
+    test('every transient status is retried', () async {
+      for (final status in transientStatusCodes) {
+        final transport = PlainJsonTransport(
+          baseUrl: Uri.parse('https://example.test'),
+          client: flaky([status]),
+          sleep: noSleep,
+        );
+        expect(
+          await transport.get('/health'),
+          equals({'status': 'OK'}),
+          reason: 'status $status',
+        );
+      }
+    });
+
+    test('it gives up rather than retrying forever', () async {
+      final transport = PlainJsonTransport(
+        baseUrl: Uri.parse('https://example.test'),
+        client: flaky([502, 502, 502, 502, 502, 502, 502, 502]),
+        sleep: noSleep,
+      );
+      expect(
+        () => transport.get('/health'),
+        throwsA(isA<DiscoveryException>()),
+      );
+    });
+
+    test('a reorg is not retried, it is an answer', () async {
+      // Repeating it arrives at the same place having wasted the wait.
+      final seen = <String>[];
+      final transport = PlainJsonTransport(
+        baseUrl: Uri.parse('https://example.test'),
+        client: flaky([reorgStatusCode], seen: seen),
+        sleep: noSleep,
+      );
+      expect(
+        () => transport.get('/health'),
+        throwsA(isA<ReorgException>()),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(seen, hasLength(1));
+    });
+
+    test('a bad request is not retried either', () async {
+      final seen = <String>[];
+      final transport = PlainJsonTransport(
+        baseUrl: Uri.parse('https://example.test'),
+        client: flaky([422], seen: seen),
+        sleep: noSleep,
+      );
+      expect(
+        () => transport.get('/health'),
+        throwsA(isA<DiscoveryException>()),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(seen, hasLength(1));
+    });
+
+    test('retries can be turned off entirely', () async {
+      final transport = PlainJsonTransport(
+        baseUrl: Uri.parse('https://example.test'),
+        client: flaky([502]),
+        retryPolicy: DiscoveryRetryPolicy.none,
+        sleep: noSleep,
+      );
+      expect(
+        () => transport.get('/health'),
+        throwsA(isA<DiscoveryException>()),
+      );
+    });
+
+    test('the backoff grows and then stops growing', () {
+      const policy = DiscoveryRetryPolicy(
+        baseDelay: Duration(seconds: 1),
+        maxDelay: Duration(seconds: 4),
+      );
+      expect(policy.delayFor(0), equals(const Duration(seconds: 1)));
+      expect(policy.delayFor(1), equals(const Duration(seconds: 2)));
+      expect(policy.delayFor(9), equals(const Duration(seconds: 4)));
     });
   });
 }

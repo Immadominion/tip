@@ -20,6 +20,36 @@ import '../errors.dart';
 /// HTTP 409 is used by the discovery service exclusively to signal a reorg.
 const int reorgStatusCode = 409;
 
+/// Statuses that mean the service is briefly unavailable rather than wrong.
+///
+/// A wallet syncing a balance should ride these out rather than showing the
+/// user an error. The live service returns 502 with "please try again in 30
+/// seconds" during deploys, and a balance that disappears because a server was
+/// restarting is a balance the user stops trusting.
+const Set<int> transientStatusCodes = {429, 500, 502, 503, 504};
+
+/// How hard to retry a service that is briefly unavailable.
+class DiscoveryRetryPolicy {
+  const DiscoveryRetryPolicy({
+    this.maxRetries = 3,
+    this.baseDelay = const Duration(seconds: 1),
+    this.maxDelay = const Duration(seconds: 15),
+  });
+
+  /// No retries. For tests, and for callers who would rather fail fast.
+  static const none = DiscoveryRetryPolicy(maxRetries: 0);
+
+  final int maxRetries;
+  final Duration baseDelay;
+  final Duration maxDelay;
+
+  /// Backoff before retry [attempt], zero-indexed: 1s, 2s, 4s by default.
+  Duration delayFor(int attempt) {
+    final scaled = baseDelay * (1 << attempt);
+    return scaled > maxDelay ? maxDelay : scaled;
+  }
+}
+
 /// Sends JSON requests to the discovery service and returns decoded responses.
 abstract class DiscoveryTransport {
   /// POSTs [body] to [path] and returns the decoded JSON object.
@@ -34,14 +64,21 @@ abstract class DiscoveryTransport {
 
 /// Plain JSON over HTTPS, straight to the service's API paths.
 class PlainJsonTransport implements DiscoveryTransport {
-  PlainJsonTransport({required Uri baseUrl, http.Client? client})
-      : _baseUrl = baseUrl,
+  PlainJsonTransport({
+    required Uri baseUrl,
+    http.Client? client,
+    this.retryPolicy = const DiscoveryRetryPolicy(),
+    Future<void> Function(Duration)? sleep,
+  })  : _baseUrl = baseUrl,
         _client = client ?? http.Client(),
-        _ownsClient = client == null;
+        _ownsClient = client == null,
+        _sleep = sleep ?? Future<void>.delayed;
 
   final Uri _baseUrl;
   final http.Client _client;
   final bool _ownsClient;
+  final DiscoveryRetryPolicy retryPolicy;
+  final Future<void> Function(Duration) _sleep;
 
   Uri _resolve(String path) =>
       _baseUrl.replace(path: '${_baseUrl.path}$path'.replaceAll('//', '/'));
@@ -50,19 +87,39 @@ class PlainJsonTransport implements DiscoveryTransport {
   Future<Map<String, dynamic>> post(
     String path,
     Map<String, dynamic> body,
-  ) async {
-    final response = await _client.post(
-      _resolve(path),
-      headers: const {'content-type': 'application/json'},
-      body: jsonEncode(body),
-    );
-    return _decode(path, response.statusCode, response.body);
-  }
+  ) =>
+      _withRetry(path, () async {
+        final response = await _client.post(
+          _resolve(path),
+          headers: const {'content-type': 'application/json'},
+          body: jsonEncode(body),
+        );
+        return (response.statusCode, response.body);
+      });
 
   @override
-  Future<Map<String, dynamic>> get(String path) async {
-    final response = await _client.get(_resolve(path));
-    return _decode(path, response.statusCode, response.body);
+  Future<Map<String, dynamic>> get(String path) => _withRetry(path, () async {
+        final response = await _client.get(_resolve(path));
+        return (response.statusCode, response.body);
+      });
+
+  /// Sends, and rides out a service that is briefly unavailable.
+  ///
+  /// Only the statuses that mean "not now" are retried. A reorg, a bad request
+  /// and a malformed response are all real answers, and repeating them wastes
+  /// the user's time to arrive at the same place.
+  Future<Map<String, dynamic>> _withRetry(
+    String path,
+    Future<(int, String)> Function() send,
+  ) async {
+    for (var attempt = 0;; attempt++) {
+      final (status, body) = await send();
+      if (!transientStatusCodes.contains(status) ||
+          attempt >= retryPolicy.maxRetries) {
+        return _decode(path, status, body);
+      }
+      await _sleep(retryPolicy.delayFor(attempt));
+    }
   }
 
   @override
