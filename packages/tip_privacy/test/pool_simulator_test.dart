@@ -184,6 +184,40 @@ void main() {
           salt: BigInt.from(5),
         );
 
+    test('a batch checks out after its own indices were allocated', () {
+      // The case that broke on first real use. Allocating moves the live
+      // counters past the indices just handed out, so a check against them
+      // would report every action as one behind itself.
+      final pool = PoolSimulator();
+      final batch = pool.beginBatch();
+      final first = batch.takeNoteIndex(channelKey: _channel, token: _token);
+      final second = batch.takeNoteIndex(channelKey: _channel, token: _token);
+
+      expect(
+        pool.checkSequential(
+          [note(first), note(second)],
+          channelKeyFor: _resolver,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a committed batch moves the baseline for the next check', () {
+      final pool = PoolSimulator();
+      final first = pool.beginBatch();
+      first.takeNoteIndex(channelKey: _channel, token: _token);
+      first.commit();
+
+      expect(
+        pool.checkSequential([note(1)], channelKeyFor: _resolver),
+        isEmpty,
+      );
+      expect(
+        pool.checkSequential([note(0)], channelKeyFor: _resolver),
+        hasLength(1),
+      );
+    });
+
     test('a well formed batch has no problems', () {
       final pool = PoolSimulator();
       expect(

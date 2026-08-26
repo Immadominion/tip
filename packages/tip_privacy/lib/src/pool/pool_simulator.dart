@@ -81,10 +81,16 @@ class PoolState {
 /// Committing folds them into the confirmed state; abandoning drops them, which
 /// is what a reverted transaction needs.
 class PoolBatch {
-  PoolBatch._(this._simulator, this._before);
+  PoolBatch._(this._simulator, this.baseline);
 
   final PoolSimulator _simulator;
-  final PoolState _before;
+
+  /// The state as the pool has it, before this batch allocated anything.
+  ///
+  /// Kept so an abandoned batch can be rolled back, and so a check of the
+  /// actions this batch produced has something to compare them against: the
+  /// live counters have already moved past them.
+  final PoolState baseline;
 
   bool _settled = false;
 
@@ -124,7 +130,7 @@ class PoolBatch {
   void abandon() {
     _assertOpen();
     _settled = true;
-    _simulator._state = _before;
+    _simulator._state = baseline;
     _simulator._batch = null;
   }
 
@@ -227,10 +233,15 @@ class PoolSimulator {
     required BigInt Function(BigInt recipientAddr, BigInt recipientPublicKey)
         channelKeyFor,
   }) {
+    // Checked against the pool's own counters, not the live ones. Allocating
+    // an index moves the live counter past it, so a batch checked after it was
+    // built would always look one ahead of itself.
+    final baseline = _batch?.baseline ?? _state;
+
     final problems = <String>[];
     final expectedNotes = <NoteSequence, int>{};
     final expectedSubchannels = <BigInt, int>{};
-    var expectedChannels = _state.outgoingChannelCount;
+    var expectedChannels = baseline.outgoingChannelCount;
 
     void checkNote({
       required BigInt recipientAddr,
@@ -243,7 +254,7 @@ class PoolSimulator {
         token: token,
       );
       final expected =
-          expectedNotes[sequence] ?? (_state.noteCounts[sequence] ?? 0);
+          expectedNotes[sequence] ?? (baseline.noteCounts[sequence] ?? 0);
       if (index != expected) {
         problems.add(
           'A note for token ${_short(token)} is at index $index but the next '
@@ -273,7 +284,7 @@ class PoolSimulator {
 
         case OpenSubchannel(:final index, :final channelKey):
           final expected = expectedSubchannels[channelKey] ??
-              peekSubchannelIndex(channelKey);
+              (baseline.subchannelCounts[channelKey] ?? 0);
           if (index != expected) {
             problems.add(
               'A subchannel is at index $index but the next free index is '
