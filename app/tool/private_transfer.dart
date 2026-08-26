@@ -104,6 +104,11 @@ Future<void> main(List<String> args) async {
   );
 
   // A note is only spendable if its nullifier has not been published.
+  //
+  // The discovery service already leaves spent notes out of what it returns,
+  // so in practice this filters nothing. It stays because spendability is a
+  // fact about the chain rather than about what a service chose to send, and
+  // the cost of checking is one call per note.
   final spendable = <tp.SpendableNote>[];
   for (final note in incoming.notes.where((n) => n.token == token)) {
     final nullifier = tp.computeNullifier(
