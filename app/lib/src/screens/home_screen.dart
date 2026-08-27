@@ -28,7 +28,9 @@ import '../theme/theme.dart';
 import '../wallet/wallet.dart';
 import '../wallet/wallet_controller.dart';
 import 'claim_screen.dart';
+import 'private_send_screen.dart';
 import 'shield_screen.dart';
+import 'unshield_screen.dart';
 import 'receive_screen.dart';
 import 'settings_screen.dart';
 import 'tip_screen.dart';
@@ -645,8 +647,14 @@ class _Actions extends StatelessWidget {
   final PrivacyController? privacy;
   final BalanceView view;
 
-  /// Opens the shield screen, or says why it cannot be opened.
-  void _shield(BuildContext context) {
+  /// Opens a screen that needs the pool, or says why it cannot.
+  ///
+  /// Every private action goes through here so that a build without a pool
+  /// fails in one place, with one message, rather than three.
+  void _private(
+    BuildContext context,
+    Widget Function(PrivacyController privacy) build,
+  ) {
     final controller = privacy;
     if (controller == null || !controller.isConfigured) {
       ScaffoldMessenger.of(context)
@@ -659,11 +667,14 @@ class _Actions extends StatelessWidget {
       return;
     }
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ShieldScreen(wallet: wallet, privacy: controller),
-      ),
+      MaterialPageRoute<void>(builder: (_) => build(controller)),
     );
   }
+
+  void _shield(BuildContext context) => _private(
+        context,
+        (privacy) => ShieldScreen(wallet: wallet, privacy: privacy),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -673,29 +684,48 @@ class _Actions extends StatelessWidget {
           child: _ActionButton(
             icon: Icons.arrow_upward,
             label: 'Send',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => SendScreen(wallet: wallet),
-              ),
-            ),
+            onTap: () => view == BalanceView.private
+                ? _private(
+                    context,
+                    (privacy) =>
+                        PrivateSendScreen(wallet: wallet, privacy: privacy),
+                  )
+                : Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => SendScreen(wallet: wallet),
+                    ),
+                  ),
           ),
         ),
         const SizedBox(width: TipTheme.spaceSm + 4),
         Expanded(
-          child: _ActionButton(
-            icon: Icons.arrow_downward,
-            label: 'Receive',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => ReceiveScreen(
-                  address: wallet.keys.accountAddress.toHexString(),
-                  networkLabel: wallet.network.isMainnet
-                      ? null
-                      : wallet.network.label,
+          child: view == BalanceView.private
+              // Coming out of the pool is the private tab's version of
+              // receiving: it is how money arrives back where it can be spent
+              // in the ordinary way.
+              ? _ActionButton(
+                  icon: Icons.arrow_downward,
+                  label: 'Unshield',
+                  onTap: () => _private(
+                    context,
+                    (privacy) =>
+                        UnshieldScreen(wallet: wallet, privacy: privacy),
+                  ),
+                )
+              : _ActionButton(
+                  icon: Icons.arrow_downward,
+                  label: 'Receive',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ReceiveScreen(
+                        address: wallet.keys.accountAddress.toHexString(),
+                        networkLabel: wallet.network.isMainnet
+                            ? null
+                            : wallet.network.label,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ),
         ),
         const SizedBox(width: TipTheme.spaceSm + 4),
         Expanded(

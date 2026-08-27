@@ -1,12 +1,12 @@
-/// Sending from the pool, privately.
+/// Taking money back out of the pool.
 ///
-/// The screen this replaces was a preview that composed actions and showed
-/// them. This one sends.
+/// The mirror of shielding, and public in the same way: the recipient, the
+/// token and the amount are all on chain. What stays hidden is which notes
+/// paid for it, and therefore who the sender was.
 ///
-/// Two things it has to be straight about. The recipient must already have
-/// registered with the pool, because a note is encrypted to their viewing key
-/// and there is nobody to encrypt it to otherwise. And unlike the public send
-/// screen, nothing here appears on chain: not the amount, not either party.
+/// Withdrawing to your own public address is the common case and the default,
+/// but it is worth knowing that doing so links the two: an observer sees the
+/// pool pay an address, and that address is you.
 library;
 
 import 'dart:async';
@@ -24,11 +24,10 @@ import '../privacy/privacy_controller.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
-import 'scan_screen.dart';
 import 'widgets/operation_progress.dart';
 
-class PrivateSendScreen extends StatefulWidget {
-  const PrivateSendScreen({
+class UnshieldScreen extends StatefulWidget {
+  const UnshieldScreen({
     super.key,
     required this.wallet,
     required this.privacy,
@@ -38,12 +37,15 @@ class PrivateSendScreen extends StatefulWidget {
   final PrivacyController privacy;
 
   @override
-  State<PrivateSendScreen> createState() => _PrivateSendScreenState();
+  State<UnshieldScreen> createState() => _UnshieldScreenState();
 }
 
-class _PrivateSendScreenState extends State<PrivateSendScreen> {
-  final _recipient = TextEditingController();
+class _UnshieldScreenState extends State<UnshieldScreen> {
   final _amount = TextEditingController();
+  final _destination = TextEditingController();
+
+  /// Off by default: most people are moving their own money back.
+  bool _elsewhere = false;
 
   OperationStage? _stage;
   String? _error;
@@ -52,14 +54,14 @@ class _PrivateSendScreenState extends State<PrivateSendScreen> {
   @override
   void initState() {
     super.initState();
-    _recipient.addListener(() => setState(() {}));
     _amount.addListener(() => setState(() {}));
+    _destination.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
-    _recipient.dispose();
     _amount.dispose();
+    _destination.dispose();
     super.dispose();
   }
 
@@ -67,10 +69,6 @@ class _PrivateSendScreenState extends State<PrivateSendScreen> {
 
   TipToken get _token => widget.wallet.network.feeToken;
   TokenAmount get _shielded => widget.privacy.shieldedBalance(_token);
-
-  String? get _recipientProblem => _recipient.text.isEmpty
-      ? null
-      : StarknetAddress.problemWith(_recipient.text);
 
   String? get _amountProblem {
     if (_amount.text.isEmpty) return null;
@@ -83,14 +81,19 @@ class _PrivateSendScreenState extends State<PrivateSendScreen> {
     return null;
   }
 
+  String? get _destinationProblem {
+    if (!_elsewhere || _destination.text.isEmpty) return null;
+    return StarknetAddress.problemWith(_destination.text);
+  }
+
   bool get _ready =>
       !_running &&
-      _recipient.text.isNotEmpty &&
       _amount.text.isNotEmpty &&
-      _recipientProblem == null &&
-      _amountProblem == null;
+      _amountProblem == null &&
+      _destinationProblem == null &&
+      (!_elsewhere || _destination.text.isNotEmpty);
 
-  Future<void> _send() async {
+  Future<void> _unshield() async {
     final session = widget.privacy.session;
     final amount = TokenAmount.tryParse(_amount.text, _token);
     if (session == null || amount == null) return;
@@ -108,8 +111,12 @@ class _PrivateSendScreenState extends State<PrivateSendScreen> {
           if (mounted) setState(() => _stage = stage);
         };
 
-      final sent = await operations.privateTransfer(
-        recipient: StarknetAddress.parse(_recipient.text).toBigInt(),
+      final to = _elsewhere
+          ? StarknetAddress.parse(_destination.text).toBigInt()
+          : widget.wallet.keys.accountAddress.toBigInt();
+
+      final sent = await operations.unshield(
+        to: to,
         token: _token,
         amount: amount.raw,
         available: widget.privacy.notes,
@@ -125,6 +132,7 @@ class _PrivateSendScreenState extends State<PrivateSendScreen> {
         _stage = null;
       });
       unawaited(widget.privacy.refresh());
+      unawaited(widget.wallet.refresh());
     } on OperationRefused catch (refusal) {
       _fail(refusal.message);
     } on PoolException catch (failure) {
@@ -142,22 +150,10 @@ class _PrivateSendScreenState extends State<PrivateSendScreen> {
     });
   }
 
-  Future<void> _scan() async {
-    final scanned = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        builder: (_) => const ScanScreen(
-          title: 'Scan an address',
-          hint: 'Point the camera at the recipient address.',
-        ),
-      ),
-    );
-    if (scanned != null && mounted) _recipient.text = scanned.trim();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Send privately')),
+      appBar: AppBar(title: const Text('Unshield')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(TipTheme.spaceLg),
@@ -177,40 +173,6 @@ class _PrivateSendScreenState extends State<PrivateSendScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('To', style: text.labelSmall),
-        const SizedBox(height: TipTheme.spaceXs),
-        TextField(
-          controller: _recipient,
-          autocorrect: false,
-          enableSuggestions: false,
-          style: text.bodyMedium?.copyWith(fontFamily: 'monospace'),
-          decoration: InputDecoration(
-            hintText: '0x...',
-            errorText: _recipientProblem,
-            suffixIcon: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
-                  tooltip: 'Scan',
-                  onPressed: _scan,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.content_paste_rounded, size: 18),
-                  tooltip: 'Paste',
-                  onPressed: () async {
-                    final data = await Clipboard.getData(Clipboard.kTextPlain);
-                    if (data?.text != null) {
-                      _recipient.text = data!.text!.trim();
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: TipTheme.spaceLg),
         Row(
           children: [
             Text('Amount', style: text.labelSmall),
@@ -232,15 +194,42 @@ class _PrivateSendScreenState extends State<PrivateSendScreen> {
         ),
 
         const SizedBox(height: TipTheme.spaceLg),
-        const _NothingOnChain(),
-
-        const SizedBox(height: TipTheme.spaceMd),
-        Text(
-          'The person you are paying has to have set up private transfers '
-          'themselves. Their note is encrypted to their viewing key, so there '
-          'is nobody to encrypt it to otherwise.',
-          style: text.labelSmall,
+        SwitchListTile(
+          value: _elsewhere,
+          onChanged: (value) => setState(() => _elsewhere = value),
+          contentPadding: EdgeInsets.zero,
+          title: Text('Send it somewhere else', style: text.titleMedium),
+          subtitle: Text(
+            'By default it comes back to this wallet.',
+            style: text.labelSmall,
+          ),
         ),
+        if (_elsewhere) ...[
+          const SizedBox(height: TipTheme.spaceXs),
+          TextField(
+            controller: _destination,
+            autocorrect: false,
+            enableSuggestions: false,
+            style: text.bodyMedium?.copyWith(fontFamily: 'monospace'),
+            decoration: InputDecoration(
+              hintText: '0x...',
+              errorText: _destinationProblem,
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.content_paste_rounded, size: 18),
+                tooltip: 'Paste',
+                onPressed: () async {
+                  final data = await Clipboard.getData(Clipboard.kTextPlain);
+                  if (data?.text != null) {
+                    _destination.text = data!.text!.trim();
+                  }
+                },
+              ),
+            ),
+          ),
+        ],
+
+        const SizedBox(height: TipTheme.spaceLg),
+        _Linkage(toSelf: !_elsewhere),
 
         if (_error != null) ...[
           const SizedBox(height: TipTheme.spaceMd),
@@ -249,8 +238,8 @@ class _PrivateSendScreenState extends State<PrivateSendScreen> {
 
         const SizedBox(height: TipTheme.spaceXl),
         FilledButton(
-          onPressed: _ready ? _send : null,
-          child: const Text('Send privately'),
+          onPressed: _ready ? _unshield : null,
+          child: const Text('Unshield'),
         ),
         const SizedBox(height: TipTheme.spaceSm),
         Text(
@@ -263,9 +252,11 @@ class _PrivateSendScreenState extends State<PrivateSendScreen> {
   }
 }
 
-/// The claim this screen is actually making.
-class _NothingOnChain extends StatelessWidget {
-  const _NothingOnChain();
+/// What a withdrawal gives away, which depends on where it goes.
+class _Linkage extends StatelessWidget {
+  const _Linkage({required this.toSelf});
+
+  final bool toSelf;
 
   @override
   Widget build(BuildContext context) {
@@ -273,28 +264,32 @@ class _NothingOnChain extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(TipTheme.spaceMd),
       decoration: BoxDecoration(
-        color: TipPalette.accentWash,
+        color: TipPalette.warning.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(TipTheme.radiusLarge),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.shield_outlined,
-              size: 18, color: TipPalette.accentDeep),
+          const Icon(Icons.visibility_outlined,
+              size: 18, color: TipPalette.warning),
           const SizedBox(width: TipTheme.spaceSm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Nothing about this appears on chain',
-                  style:
-                      text.titleSmall?.copyWith(color: TipPalette.accentDeep),
+                  'The withdrawal is public',
+                  style: text.titleSmall?.copyWith(color: TipPalette.warning),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Not the amount, not you, not them. An observer sees that '
-                  'the pool was used and nothing else.',
+                  toSelf
+                      ? 'Anyone can see the pool paying this wallet, and how '
+                          'much. What stays hidden is which notes paid, and so '
+                          'where the money came from.'
+                      : 'Anyone can see the pool paying that address, and how '
+                          'much. Sending it somewhere that is not obviously '
+                          'yours is what keeps the two apart.',
                   style: text.bodySmall,
                 ),
               ],
@@ -327,14 +322,14 @@ class _Result extends StatelessWidget {
         ),
         const SizedBox(height: TipTheme.spaceLg),
         Text(
-          ok ? 'Sent privately' : 'It did not go through',
+          ok ? 'Unshielded' : 'It did not go through',
           style: text.titleLarge,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: TipTheme.spaceXs),
         Text(
           ok
-              ? 'They can see it when their wallet next reads the pool.'
+              ? 'It is out of the pool and spendable normally.'
               : 'The transaction reverted and the fee was still charged.',
           style: text.bodyMedium,
           textAlign: TextAlign.center,
