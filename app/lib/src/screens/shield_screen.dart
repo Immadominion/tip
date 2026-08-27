@@ -39,7 +39,9 @@ class ShieldScreen extends StatefulWidget {
 class _ShieldScreenState extends State<ShieldScreen> {
   final _amount = TextEditingController();
 
-  late TipToken _token = widget.wallet.network.feeToken;
+  // Only the fee token for now. The pool holds any ERC-20, but a second token
+  // needs its own subchannel and there is nothing yet to pick one with.
+  late final TipToken _token = widget.wallet.network.feeToken;
 
   OperationStage? _stage;
   String? _error;
