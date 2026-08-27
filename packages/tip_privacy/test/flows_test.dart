@@ -1,6 +1,8 @@
 /// Note selection and the shield, unshield, and private transfer flows.
 library;
 
+import 'dart:math';
+
 import 'package:test/test.dart';
 import 'package:tip_privacy/tip_privacy.dart';
 
@@ -391,4 +393,53 @@ void _channelSetupTests() {
       expect(subchannel.recipientPublicKey, equals(recipientKey));
     });
   });
+
+  _secureRandomTests();
+}
+
+void _secureRandomTests() {
+  group('SecureRandomSource', () {
+    test('a note salt is inside the bounds the contract accepts', () {
+      // Zero means absent, one is reserved for open notes, and the salt is
+      // 120 bits. All three are asserted by the contract.
+      final source = SecureRandomSource();
+      for (var i = 0; i < 200; i++) {
+        final salt = source.nextNoteSalt();
+        expect(salt, greaterThan(BigInt.one));
+        expect(salt, lessThan(twoPow120));
+      }
+    });
+
+    test('a felt is never zero', () {
+      final source = SecureRandomSource();
+      for (var i = 0; i < 200; i++) {
+        expect(source.nextFelt(), isNot(equals(BigInt.zero)));
+      }
+    });
+
+    test('it does not repeat itself', () {
+      // A reused salt links two transactions that should look unrelated.
+      final source = SecureRandomSource();
+      final seen = {for (var i = 0; i < 200; i++) source.nextNoteSalt()};
+      expect(seen, hasLength(200));
+    });
+
+    test('a zero draw becomes a usable value rather than a rejected one', () {
+      final source = SecureRandomSource(_AlwaysZero());
+      expect(source.nextFelt(), equals(BigInt.one));
+      expect(source.nextNoteSalt(), equals(BigInt.two));
+    });
+  });
+}
+
+/// Forces the branch that a real generator reaches once in 2^248 draws.
+class _AlwaysZero implements Random {
+  @override
+  int nextInt(int max) => 0;
+
+  @override
+  bool nextBool() => false;
+
+  @override
+  double nextDouble() => 0;
 }

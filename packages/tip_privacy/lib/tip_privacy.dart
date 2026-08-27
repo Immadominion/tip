@@ -23,6 +23,7 @@ export 'src/pool/pool_simulator.dart';
 export 'src/pool/proof_invocation.dart';
 export 'src/pool/proof_transaction.dart';
 export 'src/pool/proving_rules.dart';
+export 'src/pool/secure_random.dart';
 export 'src/pool/serde.dart';
 export 'src/ohttp/varint.dart';
 export 'src/proving/proving_client.dart';

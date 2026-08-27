@@ -28,6 +28,7 @@ import '../theme/theme.dart';
 import '../wallet/wallet.dart';
 import '../wallet/wallet_controller.dart';
 import 'claim_screen.dart';
+import 'shield_screen.dart';
 import 'receive_screen.dart';
 import 'settings_screen.dart';
 import 'tip_screen.dart';
@@ -138,7 +139,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   const SizedBox(height: TipTheme.spaceLg),
                   _Hero(view: _view, wallet: _wallet, privacy: widget.privacy),
                   const SizedBox(height: TipTheme.spaceXl),
-                  _Actions(wallet: _wallet),
+                  _Actions(
+                    wallet: _wallet,
+                    privacy: widget.privacy,
+                    view: _view,
+                  ),
                   const SizedBox(height: TipTheme.spaceSm),
                   Center(
                     child: TextButton.icon(
@@ -630,9 +635,35 @@ class _ToggleOption extends StatelessWidget {
 }
 
 class _Actions extends StatelessWidget {
-  const _Actions({required this.wallet});
+  const _Actions({
+    required this.wallet,
+    required this.view,
+    this.privacy,
+  });
 
   final WalletController wallet;
+  final PrivacyController? privacy;
+  final BalanceView view;
+
+  /// Opens the shield screen, or says why it cannot be opened.
+  void _shield(BuildContext context) {
+    final controller = privacy;
+    if (controller == null || !controller.isConfigured) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('This build has no privacy pool configured'),
+          ),
+        );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ShieldScreen(wallet: wallet, privacy: controller),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -668,15 +699,21 @@ class _Actions extends StatelessWidget {
         ),
         const SizedBox(width: TipTheme.spaceSm + 4),
         Expanded(
-          child: _ActionButton(
-            icon: Icons.auto_awesome_rounded,
-            label: 'Tip',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => TipScreen(wallet: wallet),
-              ),
-            ),
-          ),
+          child: view == BalanceView.private
+              ? _ActionButton(
+                  icon: Icons.shield_moon_rounded,
+                  label: 'Shield',
+                  onTap: () => _shield(context),
+                )
+              : _ActionButton(
+                  icon: Icons.auto_awesome_rounded,
+                  label: 'Tip',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => TipScreen(wallet: wallet),
+                    ),
+                  ),
+                ),
         ),
       ],
     );
