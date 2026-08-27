@@ -5,7 +5,10 @@
 /// show a confident zero when the money is gone.
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:tip_privacy/tip_privacy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:starknet/starknet.dart';
 import 'package:tip/src/activity/activity_entry.dart';
@@ -203,6 +206,7 @@ void main() {
   });
 
   _heroTests();
+  _transportTests();
 }
 
 void _heroTests() {
@@ -242,6 +246,42 @@ void _heroTests() {
       expect(find.textContaining('unknown rather than zero'), findsOneWidget);
       wallet.dispose();
       privacy.dispose();
+    });
+  });
+}
+
+void _transportTests() {
+  group('the transport', () {
+    test('is encrypted, not plain', () async {
+      // Every live call this project made before this was plaintext, which
+      // handed the viewing key to whoever terminates TLS. That is the gap
+      // this closes, and it is worth a test that fails if anyone swaps it
+      // back for convenience.
+      final session = _StubSession(publicKey: BigInt.one);
+      final transport = session.transportTo(_config.discoveryUrl);
+      expect(transport, isA<OhttpTransport>());
+      expect(transport, isNot(isA<PlainJsonTransport>()));
+    });
+
+    test('a build with no pinned key still gets an encrypted transport', () {
+      // Unpinned OHTTP is weaker than pinned, not equivalent to plaintext: the
+      // payload is still hidden from a passive observer.
+      expect(_config.pinnedOhttpKey, isNull);
+      expect(
+        _StubSession(publicKey: BigInt.one).transportTo(_config.provingUrl),
+        isA<OhttpTransport>(),
+      );
+    });
+
+    test('the pinned key survives into the config', () {
+      final pinned = PoolConfig(
+        poolAddress: BigInt.one,
+        provingUrl: Uri.parse('https://p.test'),
+        discoveryUrl: Uri.parse('https://d.test'),
+        rpcUrl: Uri.parse('https://r.test'),
+        pinnedOhttpKey: Uint8List.fromList([1, 2, 3]),
+      );
+      expect(pinned.pinnedOhttpKey, equals([1, 2, 3]));
     });
   });
 }

@@ -211,9 +211,10 @@ class PoolSession {
     );
 
     final head = await blockNumber();
-    final client = tp.ProvingClient(
-      transport: tp.PlainJsonTransport(baseUrl: config.provingUrl),
-    );
+    // Over OHTTP: a proving request carries the whole transaction about to be
+    // submitted, so a plain transport tells whoever terminates TLS exactly
+    // what is coming and when.
+    final client = tp.ProvingClient(transport: transportTo(config.provingUrl));
     try {
       return await client.proveTransaction(
         blockId: {'block_number': tp.provingBlockFor(head)},
@@ -340,6 +341,16 @@ class PoolSession {
   Future<int> blockNumber() async =>
       ((await _rpcResult('starknet_blockNumber', const <Object>[])) as num)
           .toInt();
+
+  /// An encrypted transport to one of the pool's services.
+  ///
+  /// OHTTP rather than plain JSON. Both the discovery request and the proving
+  /// request carry things that must not be readable by infrastructure in the
+  /// middle: the viewing key in one, the pending transaction in the other.
+  tp.DiscoveryTransport transportTo(Uri service) => tp.OhttpTransport(
+        gatewayUrl: service,
+        pinnedKeyConfig: config.pinnedOhttpKey,
+      );
 
   /// A read-only call on the pool.
   Future<List<String>> call(String selector, List<String> calldata) async {

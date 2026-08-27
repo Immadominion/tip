@@ -145,8 +145,11 @@ class PrivacyController extends ChangeNotifier {
         token: network.feeToken.address.toBigInt(),
       );
 
+      // Encrypted, because the request carries the viewing key. A plain
+      // transport hands it to whoever terminates TLS, which for a hosted
+      // service is not necessarily the service.
       final client = tp.DiscoveryClient(
-        transport: tp.PlainJsonTransport(baseUrl: pool.config.discoveryUrl),
+        transport: pool.transportTo(pool.config.discoveryUrl),
         poolContractAddress: pool.config.poolAddress,
       );
       final incoming = await client.syncIncoming(
