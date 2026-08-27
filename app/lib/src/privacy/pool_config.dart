@@ -10,7 +10,7 @@
 ///     --dart-define=STRK20_PROVER=https://... \
 ///     --dart-define=STRK20_DISCOVERY=https://... \
 ///     --dart-define=STRK20_RPC=https://... \
-///     --dart-define=STRK20_OHTTP_KEY=<base64 key config>
+///     --dart-define=STRK20_OHTTP_KEY=BASE64_KEY_CONFIG
 library;
 
 import 'dart:convert';
