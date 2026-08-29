@@ -1,9 +1,10 @@
 # tip
 
-A mobile-native wallet for Starknet, built on STRK20.
+A private wallet for Starknet, on your phone. Built on STRK20.
 
-Hold, send, and tip from your phone. Non-custodial. Your keys and your viewing
-key never leave your device.
+Send money without publishing who you paid or how much you hold. Hold, send,
+and tip from a phone, non-custodially: the recovery phrase and the viewing key
+are generated on the device and never leave it.
 
 ## Why
 
@@ -88,16 +89,28 @@ dart test
 
 ## Status
 
-In progress during the STRK20 Private Sprint.
+Built during the STRK20 Private Sprint.
 
-The public wallet works and is checked against live Sepolia rather than against
-mocks: transfers, account deployment, and the whole tip link round trip, funded
-and then claimed into a wallet that had never touched the chain.
+**The shielded side works, and it has been done for real rather than in a
+test.** On Sepolia, against the live pool: a viewing key registered, a deposit
+shielded, a private transfer to another wallet, and an unshield back out. The
+balance tracked every move, and the last transfer was driven through the same
+code the screens call rather than through a script written for the occasion.
 
-The shielded side is built and tested but not yet reachable. STRK20 proofs are
-produced by a proving service, and no public endpoint for one is published
-anywhere. Until that resolves, the app says the shielded balance is unavailable
-rather than showing a zero it cannot vouch for.
+    register    0x27db4ee66b994c211f31326361bdb8d44740f95262be4c6ace563ec5ca5e59f
+    shield      0x3be9a8a80607f1403359a8468bd9ac6dcd7200f5dbfe1ff290945187fefd295
+    transfer    0x19cf143c2ab459807f3c0ebab40b4d444964a354aa07d2ef34999750a272af2
+    unshield    0x50b26f277aab15d83dc83f2bf9eb426a92f496cf45e74812fe1366de8899654
+
+The public wallet is checked the same way, against the chain rather than
+against mocks: transfers, account deployment, and the whole tip link round
+trip, funded and then claimed into a wallet that had never touched the chain.
+
+Proofs come from a proving service, because a phone cannot build a STARK in
+reasonable time and the protocol is designed around that. The service is meant
+to be run by whoever runs the wallet, and standing one up is the remaining
+piece. When it cannot be reached the app says so, before a minute is spent
+finding out, and says whether anything moved.
 
 ## Stack
 
