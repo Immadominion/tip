@@ -29,6 +29,7 @@ import '../wallet/wallet.dart';
 import '../wallet/wallet_controller.dart';
 import 'claim_screen.dart';
 import 'private_send_screen.dart';
+import 'register_screen.dart';
 import 'shield_screen.dart';
 import 'unshield_screen.dart';
 import 'receive_screen.dart';
@@ -244,7 +245,7 @@ class _Hero extends StatelessWidget {
     final text = Theme.of(context).textTheme;
 
     if (view == BalanceView.private) {
-      return _PrivateHero(privacy: privacy);
+      return _PrivateHero(privacy: privacy, wallet: wallet);
     }
 
     if (!wallet.hasLoaded) {
@@ -286,9 +287,10 @@ class _Hero extends StatelessWidget {
 /// situations, and a wallet that renders all of them as a zero teaches people
 /// to read a zero as noise.
 class _PrivateHero extends StatelessWidget {
-  const _PrivateHero({required this.privacy});
+  const _PrivateHero({required this.privacy, required this.wallet});
 
   final PrivacyController? privacy;
+  final WalletController wallet;
 
   @override
   Widget build(BuildContext context) {
@@ -308,10 +310,18 @@ class _PrivateHero extends StatelessWidget {
             title: 'Not available in this build',
             body: 'This copy of tip was built without a privacy pool.',
           ),
-        PrivacyState.unregistered => const _Explain(
-            title: 'Not set up yet',
-            body: 'Shielding needs a viewing key registered with the pool. '
-                'It is a one time step and costs a small fee.',
+        // Not just an explanation: the only way in. Registering is the one
+        // step every other private operation depends on, so the state that
+        // reports it missing is the state that has to offer to fix it.
+        PrivacyState.unregistered => _SetUpPrivate(
+            onSetUp: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => RegisterScreen(
+                  wallet: wallet,
+                  privacy: controller,
+                ),
+              ),
+            ),
           ),
         // A wallet that has read the pool before keeps showing what it read,
         // labelled stale. One that never has says the balance is unknown,
@@ -354,6 +364,43 @@ class _Amount extends StatelessWidget {
           '${amount.token.symbol}. $note',
           style: text.bodyMedium?.copyWith(color: tone),
           textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+/// The private tab before a viewing key exists.
+///
+/// This used to be a plain explanation with nothing to press, which meant a
+/// freshly installed wallet could read about the shielded side and never reach
+/// it. The button is the whole point.
+class _SetUpPrivate extends StatelessWidget {
+  const _SetUpPrivate({required this.onSetUp});
+
+  final VoidCallback onSetUp;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Column(
+      children: [
+        Text(
+          'Not set up yet',
+          style: text.titleLarge,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: TipTheme.spaceXs),
+        Text(
+          'Shielding needs a viewing key registered with the pool. It is a one '
+          'time step and costs a small fee.',
+          style: text.bodyMedium,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: TipTheme.spaceLg),
+        FilledButton(
+          onPressed: onSetUp,
+          child: const Text('Set up private balance'),
         ),
       ],
     );
@@ -801,6 +848,10 @@ class _ActivityRow extends StatelessWidget {
           switch (entry.kind) {
             ActivityKind.claim => Icons.arrow_downward_rounded,
             ActivityKind.tip => Icons.link_rounded,
+            ActivityKind.register => Icons.key_rounded,
+            ActivityKind.shield => Icons.shield_rounded,
+            ActivityKind.privateSend => Icons.lock_rounded,
+            ActivityKind.unshield => Icons.lock_open_rounded,
             _ => Icons.arrow_upward_rounded,
           },
           entry.kind == ActivityKind.claim
@@ -816,6 +867,10 @@ class _ActivityRow extends StatelessWidget {
       ActivityKind.deploy => 'Account deployed',
       ActivityKind.tip => 'Tip link created',
       ActivityKind.claim => 'Tip claimed',
+      ActivityKind.register => 'Private balance set up',
+      ActivityKind.shield => 'Shielded',
+      ActivityKind.privateSend => 'Sent privately',
+      ActivityKind.unshield => 'Unshielded',
     };
 
     final subtitle = switch (entry.status) {
