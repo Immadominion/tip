@@ -156,41 +156,60 @@ class _Welcome extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
 
-    return Padding(
-      padding: const EdgeInsets.all(TipTheme.spaceLg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Spacer(),
-          Text('tip', style: text.displayLarge),
-          const SizedBox(height: TipTheme.spaceSm),
-          Text(
-            'Money that is nobody else’s business.',
-            style: text.headlineMedium?.copyWith(color: TipPalette.inkMuted),
+    // Scrolls only when it has to. The two Spacers give the intended
+    // top-and-tail layout at ordinary text sizes; at 200% the content is taller
+    // than any phone and used to overflow by several hundred pixels with all
+    // three buttons clipped off the bottom and no way to reach them — on the
+    // first screen of the app, which makes it unusable rather than ugly.
+    //
+    // LayoutBuilder plus IntrinsicHeight is what lets both happen: the column
+    // is given at least the viewport height, so Spacer still has room to
+    // distribute, and anything beyond that scrolls.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.all(TipTheme.spaceLg),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: constraints.maxHeight - TipTheme.spaceLg * 2,
           ),
-          const SizedBox(height: TipTheme.spaceMd),
-          Text(
-            'Send and receive on Starknet without publishing who you paid, '
-            'who paid you, or how much.',
-            style: text.bodyMedium,
+          child: IntrinsicHeight(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Spacer(),
+                Text('tip', style: text.displayLarge),
+                const SizedBox(height: TipTheme.spaceSm),
+                Text(
+                  'Money that is nobody else’s business.',
+                  style: text.headlineMedium
+                      ?.copyWith(color: TipPalette.inkMuted),
+                ),
+                const SizedBox(height: TipTheme.spaceMd),
+                Text(
+                  'Send and receive on Starknet without publishing who you '
+                  'paid, who paid you, or how much.',
+                  style: text.bodyMedium,
+                ),
+                const Spacer(),
+                FilledButton(
+                  onPressed: onCreate,
+                  child: const Text('Create a wallet'),
+                ),
+                const SizedBox(height: TipTheme.spaceSm),
+                OutlinedButton(
+                  onPressed: onSignIn,
+                  child: const Text('Sign in'),
+                ),
+                const SizedBox(height: TipTheme.spaceSm),
+                OutlinedButton(
+                  onPressed: onRestore,
+                  child: const Text('I already have a phrase'),
+                ),
+                const SizedBox(height: TipTheme.spaceMd),
+              ],
+            ),
           ),
-          const Spacer(),
-          FilledButton(
-            onPressed: onCreate,
-            child: const Text('Create a wallet'),
-          ),
-          const SizedBox(height: TipTheme.spaceSm),
-          OutlinedButton(
-            onPressed: onSignIn,
-            child: const Text('Sign in'),
-          ),
-          const SizedBox(height: TipTheme.spaceSm),
-          OutlinedButton(
-            onPressed: onRestore,
-            child: const Text('I already have a phrase'),
-          ),
-          const SizedBox(height: TipTheme.spaceMd),
-        ],
+        ),
       ),
     );
   }
