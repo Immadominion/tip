@@ -324,6 +324,28 @@ void _boundsTests() {
       );
     });
 
+    test('the price carries the same margin the public path does', () {
+      // The pool path used the latest block's price with no headroom, and this
+      // transaction is signed and then proved, which takes about a minute —
+      // ample time for gas to move under a bound that was exact when read. The
+      // wallet's other fee path applies 3/2 and says why; this one did not.
+      expect(
+        PoolSession.submissionPriceMarginNumerator /
+            PoolSession.submissionPriceMarginDenominator,
+        1.5,
+      );
+    });
+
+    test('the margin is on the price, not on the amounts', () {
+      // Widening the amounts runs into the opposite failure: validation
+      // requires the account to hold the whole ceiling rather than the fee it
+      // pays, so an over-generous bound is what made an earlier version
+      // unsubmittable by anyone holding less than 78 STRK. The amounts already
+      // carry roughly 2.3x of measured usage; the prices carried none.
+      expect(amount(bounds().l2Gas), greaterThan(l2Used * BigInt.two));
+      expect(amount(bounds().l2Gas), lessThan(l2Used * BigInt.from(3)));
+    });
+
     test('the ceiling is the sum of each resource at its bound', () {
       final session = _StubSession(publicKey: BigInt.one);
       // Prices of one, so the total is just the amounts.

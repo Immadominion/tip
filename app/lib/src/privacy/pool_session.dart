@@ -462,9 +462,41 @@ class PoolSession {
     final header =
         await _rpcResult('starknet_getBlockWithTxHashes', ['latest'])
             as Map<String, dynamic>;
-    String price(String key) =>
-        ((header[key] as Map<String, dynamic>?)?['price_in_fri'] as String?) ??
-        '0x1';
+
+    /// The block's price for one resource, with headroom.
+    ///
+    /// Two things were wrong here. The price was taken from the latest block
+    /// with no margin at all, and this transaction is signed and then proved,
+    /// which takes about a minute — plenty of time for gas to move under a
+    /// bound that was exact when it was read. The wallet's other fee path
+    /// applies 3/2 for precisely this reason and explains why in
+    /// `fee_bounds.dart`; the pool path did not.
+    ///
+    /// The margin goes on the price and deliberately not on the amounts. The
+    /// amounts are already measured with headroom — about 200 million L2 gas
+    /// against 86 million observed — and widening them further runs into the
+    /// opposite failure: validation requires the account to hold the entire
+    /// ceiling rather than the fee it pays, so an over-generous bound is what
+    /// made an earlier version unsubmittable by anyone holding less than 78
+    /// STRK.
+    ///
+    /// A missing key is refused rather than defaulted. The old fallback of
+    /// `0x1` produced a bound of one fri, which cannot pay for anything: the
+    /// transaction fails with a resource error that says nothing about a node
+    /// having answered with a header shape we did not expect.
+    String price(String key) {
+      final raw = (header[key] as Map<String, dynamic>?)?['price_in_fri'];
+      if (raw is! String || raw.isEmpty) {
+        throw PoolException(
+          'The node did not report a $key for the latest block',
+          detail: 'Cannot price a submission without it.',
+        );
+      }
+      final value = BigInt.parse(raw.replaceFirst('0x', ''), radix: 16);
+      final margined = value * BigInt.from(submissionPriceMarginNumerator) ~/
+          BigInt.from(submissionPriceMarginDenominator);
+      return '0x${margined.toRadixString(16)}';
+    }
 
     return tp.ResourceBounds(
       // Measured at zero. A small allowance rather than none, since a bound of
@@ -520,6 +552,15 @@ class PoolSession {
   /// forever, which also disables the poll and the pull-to-refresh the UI tells
   /// the user to try.
   static const rpcTimeout = Duration(seconds: 20);
+
+  /// Headroom on the gas prices a submission is bounded at.
+  ///
+  /// Three halves, matching `fee_bounds.dart` and what starknet.js settled on
+  /// for v3. It is a ceiling and not a charge: execution pays what it uses, and
+  /// the only cost of a generous price bound is that the account has to hold
+  /// it.
+  static const submissionPriceMarginNumerator = 3;
+  static const submissionPriceMarginDenominator = 2;
 
   Future<Map<String, dynamic>> _rpc(String method, Object params) async {
     final client = HttpClient()
