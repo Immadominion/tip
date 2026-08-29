@@ -1,0 +1,78 @@
+# Analyse and test both packages on every push.
+#
+# The audit that prompted this found several bugs living in code that a green
+# suite ran straight past, and the test counts quoted in the planning docs were
+# a snapshot of one laptop that had already drifted. Neither problem is fixed by
+# running the same commands by hand more often; what CI adds is that "the suite
+# passes" becomes a claim about the repository rather than about a machine.
+#
+# The Flutter version is pinned. An SDK that moves under a wallet changes the
+# code that signs transactions, which is the same argument the pubspec already
+# makes for pinning starknet.dart to an exact commit.
+#
+# There is deliberately no `dart format` check. This codebase is hand-formatted
+# and reads better for it — line breaks fall where the sentence does — and
+# `dart format` would rewrite about eighty files to no benefit. The analyzer is
+# the gate; formatting is the author's.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.44.2
+
+jobs:
+  package:
+    name: tip_privacy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/tip_privacy
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: dart pub get
+
+      # The protocol crypto is checked against vendored Cairo and RFC vectors,
+      # so this needs no network and no Cairo toolchain.
+      - run: dart analyze --fatal-infos
+      - run: dart test
+
+  app:
+    name: app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - run: flutter analyze --fatal-infos
+
+      # No pool configuration is passed, so these run against the stubs. The
+      # live paths are covered by app/tool/, which needs Sepolia and money and
+      # therefore cannot run here.
+      - run: flutter test
