@@ -12,15 +12,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:tip_privacy/tip_privacy.dart' as tp;
 
+import '../activity/activity_entry.dart';
 import '../chain/amount.dart';
 import '../chain/token.dart';
 import '../privacy/operation_error.dart';
+import '../privacy/pool_session.dart';
 import '../privacy/private_operations.dart';
 import '../privacy/privacy_controller.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
+import 'widgets/fee_headroom.dart';
 import 'widgets/operation_progress.dart';
+import 'widgets/operation_result.dart';
 import 'widgets/prover_status.dart';
 
 class ShieldScreen extends StatefulWidget {
@@ -47,7 +51,7 @@ class _ShieldScreenState extends State<ShieldScreen> {
   OperationStage? _stage;
   String? _error;
   String? _sentHash;
-  String? _outcome;
+  Settlement? _outcome;
 
   @override
   void initState() {
@@ -104,6 +108,20 @@ class _ShieldScreenState extends State<ShieldScreen> {
         _stage = OperationStage.waiting;
       });
 
+      // Recorded before the wait, not after. Starknet's RPC cannot be asked
+      // which transactions involved an address, and for a private operation
+      // nothing on chain is legible anyway — so if the app is killed during the
+      // minute this takes and no row was written, the operation is gone from
+      // every record that exists.
+      await widget.wallet.record(
+        ActivityEntry.pool(
+          txHash: sent.transactionHash.toHexString(),
+          kind: ActivityKind.shield,
+          submittedAt: DateTime.now(),
+        amount: amount,
+        ),
+      );
+
       final outcome = await session.awaitSettled(sent.transactionHash);
       if (!mounted) return;
       setState(() {
@@ -135,7 +153,14 @@ class _ShieldScreenState extends State<ShieldScreen> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(TipTheme.spaceLg),
           child: _outcome != null
-              ? _Result(outcome: _outcome!, hash: _sentHash)
+              ? OperationResult(
+                  settlement: _outcome!,
+                  hash: _sentHash,
+                  successIcon: Icons.shield_rounded,
+                  successTitle: 'Shielded',
+                  successBody:
+                      'It is in the pool. Sending from here is private.',
+                )
               : _running
                   ? OperationProgress(stage: _stage!, hash: _sentHash)
                   : _form(),
@@ -181,8 +206,10 @@ class _ShieldScreenState extends State<ShieldScreen> {
         const SizedBox(height: TipTheme.spaceLg),
         const _PublicDeposit(),
 
-        if (widget.privacy.session case final session?)
+        if (widget.privacy.session case final session?) ...[
+          FeeHeadroom(session: session, wallet: widget.wallet),
           ProverStatus(session: session),
+        ],
 
         if (_error != null) ...[
           const SizedBox(height: TipTheme.spaceMd),
@@ -250,49 +277,6 @@ class _PublicDeposit extends StatelessWidget {
   }
 }
 
-class _Result extends StatelessWidget {
-  const _Result({required this.outcome, this.hash});
-
-  final String outcome;
-  final String? hash;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final ok = outcome == 'SUCCEEDED';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: TipTheme.spaceXl),
-        Icon(
-          ok ? Icons.shield_rounded : Icons.error_rounded,
-          size: 56,
-          color: ok ? TipPalette.positive : TipPalette.negative,
-        ),
-        const SizedBox(height: TipTheme.spaceLg),
-        Text(
-          ok ? 'Shielded' : 'It did not go through',
-          style: text.titleLarge,
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: TipTheme.spaceXs),
-        Text(
-          ok
-              ? 'It is in the pool. Sending from here is private.'
-              : 'The transaction reverted and the fee was still charged.',
-          style: text.bodyMedium,
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: TipTheme.spaceXl),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
-        ),
-      ],
-    );
-  }
-}
 
 class _Problem extends StatelessWidget {
   const _Problem({required this.message});

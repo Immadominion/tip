@@ -178,7 +178,7 @@ Future<void> main(List<String> args) async {
       ..writeln('sent        ${sent.transactionHash.toHexString()}')
       ..writeln(network.transactionUrl(sent.transactionHash))
       ..writeln('waiting...')
-      ..writeln('outcome     ${await session.awaitSettled(sent.transactionHash)}');
+      ..writeln('outcome     ${(await session.awaitSettled(sent.transactionHash)).name}');
   } on PoolException catch (error) {
     batch.abandon();
     stderr.writeln('$error');

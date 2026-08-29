@@ -142,7 +142,7 @@ Future<void> main(List<String> args) async {
     stdout
       ..writeln('sent      ${sent.transactionHash.toHexString()}')
       ..writeln('          ${network.transactionUrl(sent.transactionHash)}')
-      ..writeln('outcome   ${await session.awaitSettled(sent.transactionHash)}');
+      ..writeln('outcome   ${(await session.awaitSettled(sent.transactionHash)).name}');
   } on OperationRefused catch (refusal) {
     stderr.writeln('refused: $refusal');
     exit(1);

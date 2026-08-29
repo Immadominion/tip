@@ -47,6 +47,36 @@ class PoolSubmission {
   final tp.ProofResult proof;
 }
 
+
+/// How a submitted transaction ended.
+///
+/// This used to be the raw execution-status string, with `'PENDING'` invented
+/// for a timeout. Every result screen then compared against `'SUCCEEDED'` and
+/// rendered anything else as "the transaction reverted and the fee was still
+/// charged" — which for a timeout is simply false. The transaction was accepted
+/// and is very likely to land; what ran out was our patience, not the
+/// transaction. A type makes the third case impossible to forget.
+enum Settlement {
+  succeeded,
+  reverted,
+
+  /// Not an outcome: we stopped waiting. Says nothing about whether it lands.
+  pending;
+
+  factory Settlement.fromExecutionStatus(String status) => switch (status) {
+        'SUCCEEDED' => Settlement.succeeded,
+        'REVERTED' => Settlement.reverted,
+        // An unrecognised status is not a revert. Starknet has added execution
+        // statuses before and treating a new one as failure would tell the user
+        // their money is gone when it is not.
+        _ => Settlement.pending,
+      };
+
+  bool get isSuccess => this == Settlement.succeeded;
+  bool get isReverted => this == Settlement.reverted;
+  bool get isPending => this == Settlement.pending;
+}
+
 class PoolSession {
   PoolSession({
     required this.config,
@@ -340,7 +370,7 @@ class PoolSession {
   }
 
   /// Waits for a submitted transaction to settle.
-  Future<String> awaitSettled(
+  Future<Settlement> awaitSettled(
     Felt hash, {
     Duration timeout = const Duration(minutes: 5),
     Duration interval = const Duration(seconds: 5),
@@ -352,11 +382,11 @@ class PoolSession {
       final result = response['result'];
       if (result is Map) {
         final execution = result['execution_status'] as String?;
-        if (execution != null) return execution;
+        if (execution != null) return Settlement.fromExecutionStatus(execution);
       }
       await Future<void>.delayed(interval);
     }
-    return 'PENDING';
+    return Settlement.pending;
   }
 
   // ---- plumbing --------------------------------------------------------
@@ -367,9 +397,14 @@ class PoolSession {
 
   /// An encrypted transport to one of the pool's services.
   ///
-  /// OHTTP rather than plain JSON. Both the discovery request and the proving
-  /// request carry things that must not be readable by infrastructure in the
-  /// middle: the viewing key in one, the pending transaction in the other.
+  /// OHTTP rather than plain JSON. Both requests carry things that must not be
+  /// readable by infrastructure in the middle. Discovery carries the viewing
+  /// key. So does proving — `compile_actions(user_addr, viewing_key, actions)`
+  /// is the prover's own entrypoint — along with the pending transaction, so
+  /// the prover sees strictly more, not something different. An earlier version
+  /// of this comment said the viewing key went to one and the transaction to
+  /// the other, which was wrong and made the self-hosted plain-transport option
+  /// look safer than it is.
   /// The transport to the prover.
   ///
   /// Encrypted unless the operator has said they run the prover themselves,
