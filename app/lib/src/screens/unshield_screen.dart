@@ -25,6 +25,7 @@ import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
 import 'widgets/operation_progress.dart';
+import 'widgets/prover_status.dart';
 
 class UnshieldScreen extends StatefulWidget {
   const UnshieldScreen({
@@ -228,6 +229,9 @@ class _UnshieldScreenState extends State<UnshieldScreen> {
 
         const SizedBox(height: TipTheme.spaceLg),
         _Linkage(toSelf: !_elsewhere),
+
+        if (widget.privacy.session case final session?)
+          ProverStatus(session: session),
 
         if (_error != null) ...[
           const SizedBox(height: TipTheme.spaceMd),

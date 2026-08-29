@@ -26,6 +26,7 @@ import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
 import 'scan_screen.dart';
 import 'widgets/operation_progress.dart';
+import 'widgets/prover_status.dart';
 
 class PrivateSendScreen extends StatefulWidget {
   const PrivateSendScreen({
@@ -239,6 +240,9 @@ class _PrivateSendScreenState extends State<PrivateSendScreen> {
           'is nobody to encrypt it to otherwise.',
           style: text.labelSmall,
         ),
+
+        if (widget.privacy.session case final session?)
+          ProverStatus(session: session),
 
         if (_error != null) ...[
           const SizedBox(height: TipTheme.spaceMd),

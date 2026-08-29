@@ -21,6 +21,7 @@ import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
 import 'widgets/operation_progress.dart';
+import 'widgets/prover_status.dart';
 
 class ShieldScreen extends StatefulWidget {
   const ShieldScreen({
@@ -179,6 +180,9 @@ class _ShieldScreenState extends State<ShieldScreen> {
 
         const SizedBox(height: TipTheme.spaceLg),
         const _PublicDeposit(),
+
+        if (widget.privacy.session case final session?)
+          ProverStatus(session: session),
 
         if (_error != null) ...[
           const SizedBox(height: TipTheme.spaceMd),

@@ -225,6 +225,32 @@ class PoolSession {
     }
   }
 
+  /// Whether the proving service is answering.
+  ///
+  /// Worth asking before a user composes a transfer rather than after. Proving
+  /// is the slowest step and the one most likely to be down, since it is the
+  /// piece a wallet cannot host, and finding out at the end costs a minute of
+  /// somebody's attention to arrive at the same answer this gets in a second.
+  ///
+  /// Never throws. An unreachable prover is the thing being reported, not a
+  /// failure of the reporting.
+  Future<bool> proverReachable() async {
+    final client = tp.ProvingClient(
+      transport: transportTo(
+        config.provingUrl,
+        timeout: const Duration(seconds: 10),
+      ),
+      retryPolicy: tp.ProvingRetryPolicy.none,
+    );
+    try {
+      return await client.isHealthy();
+    } on Object {
+      return false;
+    } finally {
+      client.close();
+    }
+  }
+
   // ---- submitting ------------------------------------------------------
 
   /// Applies a proof on chain.
@@ -347,9 +373,15 @@ class PoolSession {
   /// OHTTP rather than plain JSON. Both the discovery request and the proving
   /// request carry things that must not be readable by infrastructure in the
   /// middle: the viewing key in one, the pending transaction in the other.
-  tp.DiscoveryTransport transportTo(Uri service) => tp.OhttpTransport(
+  /// An encrypted transport to [service].
+  ///
+  /// [timeout] is shorter than the default only for calls that are meant to
+  /// answer quickly. A proof is not one of them.
+  tp.DiscoveryTransport transportTo(Uri service, {Duration? timeout}) =>
+      tp.OhttpTransport(
         gatewayUrl: service,
         pinnedKeyConfig: config.pinnedOhttpKey,
+        timeout: timeout ?? tp.defaultRequestTimeout,
       );
 
   /// A read-only call on the pool.

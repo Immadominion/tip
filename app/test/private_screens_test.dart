@@ -65,8 +65,16 @@ class _StubSession extends PoolSession {
           feeToken: _network.feeToken.address.toBigInt(),
         );
 
+  /// Answers for the prover without a network call. The widget tests are
+  /// about the screens, and a stub that quietly tried to reach a real prover
+  /// would make them depend on whether one was up.
+  bool proverUp = true;
+
   @override
   Future<BigInt> registeredPublicKey(BigInt address) async => BigInt.one;
+
+  @override
+  Future<bool> proverReachable() async => proverUp;
 }
 
 Future<(WalletController, PrivacyController)> _pump(
