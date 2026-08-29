@@ -15,6 +15,8 @@ import '../backup/backup_service.dart';
 import '../chain/address.dart';
 import '../security/app_lock.dart';
 import '../theme/palette.dart';
+import '../security/secret_clipboard.dart';
+import 'unclaimed_tips_screen.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
 import 'backup_screen.dart';
@@ -240,6 +242,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     leading: const Icon(Icons.open_in_new_rounded, size: 18),
                     title: const Text('View on the explorer'),
                     onTap: () => _open(_wallet.network.addressUrl(address)),
+                  ),
+                  // A funded tip link is money that only exists in the link, so
+                  // there has to be somewhere to get it back from.
+                  ListTile(
+                    leading: const Icon(Icons.link_rounded, size: 18),
+                    title: const Text('Unclaimed tips'),
+                    subtitle: const Text('Links you funded and can still send'),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const UnclaimedTipsScreen(),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -472,7 +486,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Device authentication in front of an action that exposes or destroys the
+  /// only copy of the money.
+  ///
+  /// Gated on whether the device *can* authenticate, not on whether the app
+  /// lock is switched on. Those are different questions: the lock is a
+  /// preference about opening the app, while this is about the three actions
+  /// that are irreversible no matter how the app was opened. Revealing the
+  /// phrase, copying it, and erasing the wallet were all reachable in three
+  /// taps from an unlocked phone, on a screen that already asks for
+  /// authentication before letting you toggle a *preference*.
+  ///
+  /// A device with no authentication at all falls through to the existing
+  /// confirmation dialog. Refusing the action entirely would lock someone out
+  /// of their own recovery phrase because their phone has no passcode.
+  Future<bool> _reauthorize(String reason) async {
+    final lock = widget.lock;
+    if (lock == null) return true;
+    if (!await lock.isAvailable) return true;
+    final ok = await lock.authenticate(reason: reason);
+    if (!ok && mounted) _say('Not confirmed, so nothing changed.');
+    return ok;
+  }
+
   Future<void> _confirmReveal() async {
+    if (!await _reauthorize('Confirm to show your recovery phrase')) return;
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -497,6 +536,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _confirmErase() async {
+    if (!await _reauthorize('Confirm to remove this wallet')) return;
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -571,13 +612,14 @@ class _Phrase extends StatelessWidget {
           icon: const Icon(Icons.copy_rounded, size: 18),
           label: const Text('Copy phrase'),
           onPressed: () {
-            Clipboard.setData(ClipboardData(text: mnemonic));
+            SecretClipboard.copy(mnemonic);
             ScaffoldMessenger.of(context)
               ..hideCurrentSnackBar()
               ..showSnackBar(
                 const SnackBar(
                   content: Text(
-                    'Phrase copied. Clear your clipboard when you are done.',
+                    'Phrase copied. It clears from the clipboard in a minute, '
+                    'or when you leave the app.',
                   ),
                 ),
               );

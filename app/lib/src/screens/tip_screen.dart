@@ -15,6 +15,7 @@ import 'package:share_plus/share_plus.dart';
 import '../activity/activity_entry.dart';
 import '../chain/amount.dart';
 import '../claim/claim_service.dart';
+import '../claim/pending_tips.dart';
 import '../theme/palette.dart';
 import '../theme/theme.dart';
 import '../wallet/wallet_controller.dart';
@@ -33,6 +34,10 @@ class _TipScreenState extends State<TipScreen> {
   final _amount = TextEditingController();
 
   late final ClaimService _claims = ClaimService(client: widget.wallet.client);
+
+  /// Holds the link before the money moves, so an app killed at the wrong
+  /// moment does not take the only copy of the secret with it.
+  final PendingTipsStore _pending = PendingTipsStore();
 
   TokenAmount? _fees;
   bool _pricing = false;
@@ -96,6 +101,16 @@ class _TipScreenState extends State<TipScreen> {
       final issue = await _claims.createTip(
         from: widget.wallet.keys.signing,
         amount: total,
+        // Saved before the transaction goes out. The link is the money, and
+        // this is the only window in which losing it is unrecoverable.
+        onKeyCreated: (key) => _pending.add(
+          PendingTip(
+            link: key.link().toString(),
+            address: key.address.toHexString(),
+            createdAt: DateTime.now(),
+            amountLabel: total.formatWithSymbol(),
+          ),
+        ),
       );
       await widget.wallet.record(
         ActivityEntry.send(
@@ -116,8 +131,53 @@ class _TipScreenState extends State<TipScreen> {
     }
   }
 
+  /// Whether the link has been copied or shared since it was funded.
+  ///
+  /// Not a claim that the recipient has it — only that it left this screen by
+  /// some route the user chose.
+  bool _shared = false;
+
+  Future<bool> _confirmLeave() async {
+    if (_issue == null || _shared) return true;
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Leave without the link?'),
+        content: const Text(
+          'This tip is funded and the link is the only way to reach it. It is '
+          'saved under Unclaimed tips in Settings, so it is not lost — but '
+          'nobody can claim it until you send it to them.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Stay'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
+    return leave ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _confirmLeave() && mounted) {
+          if (context.mounted) Navigator.of(context).pop();
+        }
+      },
+      child: _scaffold(context),
+    );
+  }
+
+  Widget _scaffold(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(_issue == null ? 'Send a tip' : 'Tip link')),
       body: SafeArea(
@@ -291,18 +351,19 @@ class _TipScreenState extends State<TipScreen> {
         FilledButton.icon(
           icon: const Icon(Icons.ios_share_rounded, size: 18),
           label: const Text('Share the link'),
-          onPressed: () => SharePlus.instance.share(
-            ShareParams(
-              text: link,
-              subject: 'A tip for you',
-            ),
-          ),
+          onPressed: () {
+            setState(() => _shared = true);
+            SharePlus.instance.share(
+              ShareParams(text: link, subject: 'A tip for you'),
+            );
+          },
         ),
         const SizedBox(height: TipTheme.spaceSm),
         OutlinedButton.icon(
           icon: const Icon(Icons.copy_rounded, size: 18),
           label: const Text('Copy'),
           onPressed: () {
+            setState(() => _shared = true);
             Clipboard.setData(ClipboardData(text: link));
             ScaffoldMessenger.of(context)
               ..hideCurrentSnackBar()
@@ -313,7 +374,10 @@ class _TipScreenState extends State<TipScreen> {
         ),
         const SizedBox(height: TipTheme.spaceSm),
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () async {
+            final leave = await _confirmLeave();
+            if (leave && mounted) Navigator.of(context).pop();
+          },
           child: const Text('Done'),
         ),
       ],
