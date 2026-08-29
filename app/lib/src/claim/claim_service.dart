@@ -21,12 +21,24 @@ import '../chain/transfer_service.dart';
 import 'claim_link.dart';
 
 /// What a claim link is worth, and whether it can be redeemed.
+/// Thrown when the fees to empty a link cannot be priced.
+///
+/// Its own type so that "we could not work it out" never collapses into a
+/// number, which is what a zero would be.
+class ClaimPricingException implements Exception {
+  const ClaimPricingException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
 class ClaimStatus {
   const ClaimStatus({
     required this.balance,
     required this.deployed,
     required this.claimable,
     this.shortfall,
+    this.costUnknown = false,
   });
 
   /// What is sitting at the claim address.
@@ -43,8 +55,17 @@ class ClaimStatus {
   /// and saying so plainly beats a claim that reverts.
   final TokenAmount? shortfall;
 
+  /// Set when the fees could not be priced at all.
+  ///
+  /// Distinct from a shortfall, which is a known answer. This used to be
+  /// reported as a cost of zero, which made [claimable] the whole balance and
+  /// promised the recipient every last unit of a link that could not be
+  /// claimed at all.
+  final bool costUnknown;
+
   bool get isEmpty => balance.isZero;
-  bool get canClaim => shortfall == null && !claimable.isZero;
+  bool get canClaim =>
+      shortfall == null && !costUnknown && !claimable.isZero;
 }
 
 class ClaimService {
@@ -94,13 +115,22 @@ class ClaimService {
   /// [amount] is what the recipient sees at the address. The fees to get it
   /// out come from it, so [estimateClaimCost] is what the caller should be
   /// adding on top before it gets here.
+  /// Funds a new tip link.
+  ///
+  /// [onKeyCreated] runs after the secret exists and **before** the funding
+  /// transaction is sent, so a caller can persist it first. That ordering is
+  /// the whole point: the secret is the only way to reach the money, and a
+  /// process killed between sending and saving loses it permanently. Anything
+  /// it throws aborts before the money moves, which is the safe direction.
   Future<ClaimIssue> createTip({
     required SigningAccount from,
     required TokenAmount amount,
+    Future<void> Function(ClaimKey key)? onKeyCreated,
   }) async {
     final key = ClaimLinks.create(
       accountClassHash: client.network.accountClassHash,
     );
+    await onKeyCreated?.call(key);
 
     final quote = await _transfers.quote(
       from: from,
@@ -149,13 +179,26 @@ class ClaimService {
     // than the sender's conservative budget. The sweep itself still has to be
     // priced against the reference account, since a contract that is not
     // deployed cannot be asked to estimate an invoke.
-    final cost = deployed
-        ? await _sweepCeiling(key)
-        : TokenAmount(
-            (await _deploymentCeiling(key)).raw +
-                (await _transferCeiling(reference)).raw,
-            _token,
-          );
+    final TokenAmount cost;
+    try {
+      cost = deployed
+          ? await _sweepCeiling(key)
+          : TokenAmount(
+              (await _deploymentCeiling(key, reference: reference)).raw +
+                  (await _transferCeiling(reference)).raw,
+              _token,
+            );
+    } on ClaimPricingException {
+      // Say we do not know rather than assume zero. An unpriceable link is a
+      // node that would not estimate, and quoting the full balance as claimable
+      // is a promise this code cannot keep.
+      return ClaimStatus(
+        balance: balance,
+        deployed: deployed,
+        claimable: TokenAmount.zero(_token),
+        costUnknown: true,
+      );
+    }
 
     final left = balance.raw - cost.raw;
     if (!left.isNegative && left > BigInt.zero) {
@@ -175,13 +218,19 @@ class ClaimService {
 
   /// What deploying this claim account will cost, at the ceiling.
   ///
-  /// Falls back to the conservative budget if the estimate is refused, which
-  /// happens when the link has not been funded yet.
-  Future<TokenAmount> _deploymentCeiling(ClaimKey key) async {
+  /// The fallback used to re-price against the claim account itself, which is
+  /// by definition not deployed, so it failed too and returned zero. Pricing
+  /// against the reference account is at least an account that exists.
+  Future<TokenAmount> _deploymentCeiling(
+    ClaimKey key, {
+    required SigningAccount reference,
+  }) async {
     try {
       return await _transfers.deploymentCeiling(key.signing);
+    } on ClaimPricingException {
+      rethrow;
     } catch (_) {
-      return _transferCeiling(key.signing);
+      return _transferCeiling(reference);
     }
   }
 
@@ -192,7 +241,14 @@ class ClaimService {
       recipient: coldAddress,
       amount: TokenAmount(BigInt.one, _token),
     );
-    return quote.maxFee ?? TokenAmount.zero(_token);
+    // A missing quote is an unpriced transaction, not a free one. Returning
+    // zero here is what let a link with no fee headroom advertise its whole
+    // balance as claimable.
+    final fee = quote.maxFee;
+    if (fee == null) {
+      throw const ClaimPricingException('The fee could not be estimated');
+    }
+    return fee;
   }
 
   Future<TokenAmount> _sweepCeiling(ClaimKey key) async {
@@ -202,7 +258,11 @@ class ClaimService {
       recipient: coldAddress,
       amount: TokenAmount(BigInt.one, _token),
     );
-    return quote.maxFee ?? TokenAmount.zero(_token);
+    final fee = quote.maxFee;
+    if (fee == null) {
+      throw const ClaimPricingException('The fee could not be estimated');
+    }
+    return fee;
   }
 
   /// Moves everything a link holds into [recipient].

@@ -247,6 +247,21 @@ class _ClaimScreenState extends State<ClaimScreen> {
       );
     }
 
+    // Unpriced is not the same as short. Saying it is short by "a little" when
+    // nothing could be estimated invents a fact, and the number it used to
+    // invent was that the whole balance was claimable.
+    if (status.costUnknown) {
+      return _Message(
+        icon: Icons.help_outline,
+        tint: TipPalette.warning,
+        title: 'Cannot work out what this is worth',
+        body: 'This link holds ${status.balance.formatWithSymbol()}, but the '
+            'network fees to move it could not be estimated just now, so how '
+            'much would reach you is unknown. Try again in a moment.',
+        action: TextButton(onPressed: _look, child: const Text('Try again')),
+      );
+    }
+
     if (!status.canClaim) {
       return _Message(
         icon: Icons.error_outline,
