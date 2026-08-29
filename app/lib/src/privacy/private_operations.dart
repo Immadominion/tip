@@ -52,6 +52,40 @@ class PrivateOperations {
 
   void _stage(OperationStage stage) => onStage?.call(stage);
 
+  /// Drops notes the chain says are already spent.
+  ///
+  /// The discovery service already omits spent notes, and that is good enough
+  /// to show a balance. It is not good enough to build a batch from: whether a
+  /// note is spendable is a fact about the chain, not about what a service
+  /// chose to send, and a stale page or a note spent from another device
+  /// produces a `UseNote` whose nullifier is already published. The pool
+  /// refuses the whole batch, after a minute of proving and after the fee has
+  /// been approved.
+  ///
+  /// `privacy_controller.dart` has documented this as happening since before it
+  /// did — "spending re-checks each note against the chain" — and the CLI tools
+  /// in `app/tool/` have always done it. This is the app catching up with its
+  /// own comment.
+  ///
+  /// One call per note. That is fine for the handful a wallet holds, and the
+  /// alternative is trusting a cache with somebody's money.
+  Future<List<tp.SpendableNote>> _unspent(
+    List<tp.SpendableNote> notes,
+  ) async {
+    final live = <tp.SpendableNote>[];
+    for (final note in notes) {
+      final nullifier = tp.computeNullifier(
+        channelKey: note.channelKey,
+        token: note.token,
+        index: note.index,
+        ownerPrivateKey: session.keys.viewingKey,
+      );
+      if (await session.nullifierExists(nullifier)) continue;
+      live.add(note);
+    }
+    return live;
+  }
+
   /// Registers this wallet's viewing key. Once per wallet, before anything.
   Future<PoolSubmission> register() async {
     _stage(OperationStage.reading);
@@ -139,6 +173,7 @@ class PrivateOperations {
     _stage(OperationStage.reading);
     final self = session.keys.accountAddress.toBigInt();
     final selfKey = await _requireRegistered(self);
+    available = await _unspent(available);
 
     final recipientKey = await session.registeredPublicKey(recipient);
     if (recipientKey == BigInt.zero) {
@@ -220,6 +255,7 @@ class PrivateOperations {
     _stage(OperationStage.reading);
     final self = session.keys.accountAddress.toBigInt();
     final selfKey = await _requireRegistered(self);
+    available = await _unspent(available);
     final tokenAddress = token.address.toBigInt();
 
     final ours = session.channelTo(

@@ -114,6 +114,10 @@ class PrivacyController extends ChangeNotifier {
   /// balance; spending re-checks each note against the chain, because whether
   /// a note is spendable is a fact about the chain rather than about what a
   /// service chose to send.
+  ///
+  /// The re-check lives in `PrivateOperations._unspent` and runs on both spend
+  /// paths. It is named here because this comment described it for some time
+  /// before it existed anywhere but the CLI tools.
   /// Notes the service sent that we could not key to a channel, and so cannot
   /// spend. Normally zero. A non-zero count means either a channel we have not
   /// discovered yet or a note that is not ours, and either way it is honest to
