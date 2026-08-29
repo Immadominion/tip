@@ -259,4 +259,33 @@ void main() {
       expect(TokenAmount.zero(strk).format(), equals('0'));
     });
   });
+
+  group('a comma is never a decimal point', () {
+    // The bug this guards: `replaceAll(',', '')` turned `0,1` into `01` and
+    // sent 1 STRK. The system keyboard's decimal key is a comma across much of
+    // Europe and Asia, so this was reachable by typing, not just by pasting.
+    for (final input in ['0,1', '1,5', '1,23', '0,001', '1234,5', '1.234,56']) {
+      test('$input is refused rather than silently multiplied', () {
+        expect(
+          () => TokenAmount.parse(input, TipTokens.sepolia.first),
+          throwsA(isA<AmountFormatException>()),
+        );
+      });
+    }
+
+    test('a real grouping comma still parses', () {
+      final token = TipTokens.sepolia.first;
+      expect(TokenAmount.parse('1,234', token).raw,
+          TokenAmount.parse('1234', token).raw);
+      expect(TokenAmount.parse('1,234.56', token).raw,
+          TokenAmount.parse('1234.56', token).raw);
+      expect(TokenAmount.parse('12,345,678', token).raw,
+          TokenAmount.parse('12345678', token).raw);
+    });
+
+    test('tryParse returns null rather than a tenfold amount', () {
+      expect(TokenAmount.tryParse('0,1', TipTokens.sepolia.first), isNull);
+    });
+  });
+
 }

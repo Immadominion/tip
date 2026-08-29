@@ -99,8 +99,24 @@ class TokenAmount implements Comparable<TokenAmount> {
   /// anything it cannot represent exactly, including more decimal places than
   /// the token has: silently dropping the tail would send a different amount
   /// than the one on screen.
+  ///
+  /// A comma is only ever a grouping separator here, never a decimal point.
+  /// That is a real ambiguity and it used to be resolved the dangerous way:
+  /// stripping every comma turned `0,1` into `01` and sent 1 STRK, and `1,5`
+  /// into `15`. The system keyboard's decimal key *is* a comma in fr, de, es,
+  /// it, pt, id, vi and ru, so this was reachable by typing normally rather
+  /// than by pasting something strange.
+  ///
+  /// Rather than guess which one the user meant, anything that looks like a
+  /// decimal comma is refused and the user is asked for a point. Guessing wrong
+  /// in the grouping direction costs a factor of ten, and the amount is
+  /// irreversible once signed.
   static TokenAmount parse(String input, TipToken token) {
-    final cleaned = input.replaceAll(',', '').replaceAll(' ', '').trim();
+    final trimmed = input.trim();
+    if (trimmed.contains(',')) {
+      _rejectDecimalComma(trimmed);
+    }
+    final cleaned = trimmed.replaceAll(',', '').replaceAll(' ', '').trim();
 
     if (cleaned.isEmpty) {
       throw const AmountFormatException('Enter an amount');
@@ -129,6 +145,38 @@ class TokenAmount implements Comparable<TokenAmount> {
     final padded = fractionText.padRight(token.decimals, '0');
     final raw = BigInt.parse(wholeText + padded);
     return TokenAmount(raw, token);
+  }
+
+  /// Throws when a comma cannot be read as a thousands separator.
+  ///
+  /// A grouping comma has exactly three digits after it and another group or
+  /// the decimal point beyond that: `1,234`, `1,234.56`, `12,345,678`. Anything
+  /// else — `0,1`, `1,5`, `1,23`, `1.234,56` — is somebody typing a decimal
+  /// comma, and there is no safe way to interpret it as grouping.
+  static void _rejectDecimalComma(String input) {
+    const message = AmountFormatException(
+      'Use a point for decimals, not a comma',
+    );
+
+    // A comma anywhere after a decimal point is never grouping: `1.234,56`.
+    final point = input.indexOf('.');
+    if (point != -1 && input.indexOf(',', point) != -1) throw message;
+
+    final groups = input.split(',');
+    // Every group after the first must be exactly three digits.
+    for (var i = 1; i < groups.length; i++) {
+      final group = i == groups.length - 1
+          ? groups[i].split('.').first
+          : groups[i];
+      if (group.length != 3 || !_isDigits(group)) throw message;
+    }
+    // And the first must be one to three digits, so `1234,5` is refused too.
+    final head = groups.first;
+    if (head.isEmpty || head.length > 3 || !_isDigits(head)) throw message;
+    // A grouping head never carries a leading zero: `0,001` is somebody typing
+    // a decimal comma, not one thousandth of a thousand.
+    if (head.length > 1 && head.startsWith('0')) throw message;
+    if (head == '0') throw message;
   }
 
   static TokenAmount? tryParse(String input, TipToken token) {
