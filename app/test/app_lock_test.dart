@@ -5,6 +5,8 @@
 /// that, not on whether the lock is hard to defeat.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:starknet/starknet.dart';
@@ -356,4 +358,90 @@ void main() {
       );
     });
   });
+
+  group('what the lock actually covers', () {
+    testWidgets('a pushed screen does not survive the lock', (tester) async {
+      // The bug: BootScreen is the app's `home:`, so relocking replaced only
+      // the bottom route. Anything pushed on top of it — Send, Settings with
+      // the recovery phrase on screen, a private transfer mid-flight — is a
+      // route *above* `home:` in the same Navigator and stayed both visible and
+      // interactive with the lock sitting underneath it. The lock looked
+      // engaged and guarded nothing.
+      final lock = _FakeLock(enabled: true);
+      await _boot(
+        tester,
+        store: _FakeStore(stored: WalletFactory.generateMnemonic()),
+        lock: lock,
+        lockAfter: Duration.zero,
+      );
+      expect(find.text('Account'), findsOneWidget, reason: 'unlocked at launch');
+
+      // Push something the way the app does, with content worth protecting.
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(
+              body: Center(child: Text('a pushed screen')),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('a pushed screen'), findsOneWidget);
+
+      // Leave and come back past the timeout, and fail the prompt — which is
+      // what pressing Cancel on the biometric sheet does.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      lock.willSucceed = false;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Unlock'), findsOneWidget);
+      expect(
+        find.text('a pushed screen'),
+        findsNothing,
+        reason: 'the pushed route outlived the lock',
+      );
+      expect(find.text('Account'), findsNothing);
+    });
+
+    testWidgets('unlocking returns to the home screen, not to what was pushed',
+        (tester) async {
+      final lock = _FakeLock(enabled: true);
+      await _boot(
+        tester,
+        store: _FakeStore(stored: WalletFactory.generateMnemonic()),
+        lock: lock,
+        lockAfter: Duration.zero,
+      );
+
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(
+              body: Center(child: Text('a pushed screen')),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      lock.willSucceed = false;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      lock.willSucceed = true;
+      await tester.tap(find.text('Unlock'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Account'), findsOneWidget);
+      expect(find.text('a pushed screen'), findsNothing);
+    });
+  });
+
 }

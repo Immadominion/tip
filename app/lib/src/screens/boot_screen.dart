@@ -123,6 +123,25 @@ class _BootScreenState extends State<BootScreen> with WidgetsBindingObserver {
   Future<void> _relock() async {
     if (!await _lock.isEnabled()) return;
     if (!mounted || _phase != _Phase.ready) return;
+
+    // Everything above this screen has to go first.
+    //
+    // This widget is the app's `home:`, so switching `_phase` only replaces the
+    // bottom route. Anything pushed on top of it — Send, Settings with the
+    // recovery phrase on screen, a private transfer mid-flight — is a route
+    // *above* `home:` in the same Navigator, and it stayed both visible and
+    // interactive with the lock sitting underneath it. The lock looked engaged
+    // and guarded nothing.
+    //
+    // Popping is the right direction as well as the easy one: someone who put
+    // the phone down long enough to trigger a relock should not come back to a
+    // half-filled send form. An operation already in flight keeps running and
+    // now leaves an activity row, so nothing is lost by closing the screen that
+    // started it.
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) navigator.popUntil((route) => route.isFirst);
+
+    if (!mounted || _phase != _Phase.ready) return;
     setState(() => _phase = _Phase.locked);
   }
 
