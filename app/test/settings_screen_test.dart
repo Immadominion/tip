@@ -201,4 +201,42 @@ void main() {
     expect(shown.any((s) => s.length == 66 && s.startsWith('0x')), isTrue);
     harness.controller.dispose();
   });
+
+  testWidgets('removal does not claim the funds are gone when they are not',
+      (tester) async {
+    // The dialog said "the funds are gone and nobody can recover them for you"
+    // regardless of whether an encrypted backup existed. For someone who made
+    // one on purpose that is simply false, and it is the most frightening
+    // possible way to be wrong.
+    final harness = await _pump(tester);
+
+    await tester.tap(find.text('Remove wallet from this device'));
+    await tester.pumpAndSettle();
+
+    // With no backup configured in this harness, the blunt warning is correct
+    // and must still be there.
+    expect(find.textContaining('the funds are gone'), findsOneWidget);
+
+    await tester.tap(find.text('Keep it'));
+    await tester.pumpAndSettle();
+    harness.controller.dispose();
+  });
+
+  testWidgets('removal keeps the backup unless it is asked to delete it',
+      (tester) async {
+    // The checkbox defaults to off and dismissing the dialog cannot turn it on,
+    // because deleting the last remote copy of a recovery phrase should never
+    // be something that happens by not noticing.
+    final harness = await _pump(tester);
+
+    await tester.tap(find.text('Remove wallet from this device'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+
+    expect(harness.wallet.deleted, isTrue);
+    expect(harness.erasedCallbacks, equals(1));
+    harness.controller.dispose();
+  });
+
 }

@@ -538,33 +538,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _confirmErase() async {
     if (!await _reauthorize('Confirm to remove this wallet')) return;
     if (!mounted) return;
+    // What this costs depends on whether there is a backup, and the dialog used
+    // to say the funds were gone either way. For someone who made an encrypted
+    // backup on purpose that is simply false, and it is the most frightening
+    // possible way to be wrong.
+    final hasBackup = _hasBackup;
+
+    // Tri-state on purpose: null means keep the backup, which is the safe
+    // default and what happens if the dialog is dismissed.
+    var alsoDeleteBackup = false;
+
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove this wallet?'),
-        content: const Text(
-          'This erases the phrase from this device. If you have not written it '
-          'down, the funds are gone and nobody can recover them for you.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep it'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Remove this wallet?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                hasBackup
+                    ? 'This erases the phrase from this device. Your encrypted '
+                        'backup stays where it is, so you can restore from it '
+                        'with your backup password.'
+                    : 'This erases the phrase from this device. If you have '
+                        'not written it down, the funds are gone and nobody '
+                        'can recover them for you.',
+              ),
+              if (hasBackup) ...[
+                const SizedBox(height: TipTheme.spaceMd),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: alsoDeleteBackup,
+                  onChanged: (v) =>
+                      setDialogState(() => alsoDeleteBackup = v ?? false),
+                  title: const Text('Delete the backup too'),
+                  subtitle: const Text(
+                    'Then nothing is left anywhere, and only the written '
+                    'phrase can bring the wallet back.',
+                  ),
+                ),
+              ],
+            ],
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: TipPalette.negative,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Keep it'),
             ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: TipPalette.negative,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Remove'),
+            ),
+          ],
+        ),
       ),
     );
     if (!(ok ?? false)) return;
 
     try {
+      // The backup first. Erasing the wallet navigates away, so anything left
+      // until afterwards would not run — and a half-done erase that kept the
+      // blob while claiming to have removed everything is worse than not
+      // offering the option.
+      if (alsoDeleteBackup) await BackupService().remove();
+
       await _wallet.erase();
+
+      // Signing out too. Leaving a session behind means the next person to open
+      // the app lands in someone else's account, and after the erase there is
+      // no screen left to sign out from.
+      await widget.auth?.signOut();
+
       widget.onErased();
     } catch (error) {
       if (!mounted) return;
