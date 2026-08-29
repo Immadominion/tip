@@ -8,11 +8,11 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../theme/palette.dart';
 import 'restore_backup_screen.dart';
 import 'sign_in_screen.dart';
+import '../security/secret_clipboard.dart';
 import '../theme/theme.dart';
 import '../auth/auth_service.dart';
 import '../backup/backup_service.dart';
@@ -242,11 +242,12 @@ class _ShowPhrase extends StatelessWidget {
           const SizedBox(height: TipTheme.spaceMd),
           TextButton.icon(
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: mnemonic));
+              SecretClipboard.copy(mnemonic);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text(
-                    'Copied. Paste it somewhere only you can read.',
+                    'Copied. It clears from the clipboard in a minute, or '
+                    'when you leave the app.',
                   ),
                 ),
               );
