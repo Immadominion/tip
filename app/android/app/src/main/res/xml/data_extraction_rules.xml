@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ splits what allowBackup used to cover into two decisions, and
+  both are refused.
+
+  cloud-backup is Google Drive. device-transfer is the direct copy made when
+  someone sets up a new phone from an old one.
+
+  A wallet has nothing worth putting in either. The seed is sealed to a Keystore
+  key that does not travel, so a copy of it restores as unreadable bytes; the
+  Supabase session would travel in the clear and should not. The one thing that
+  is meant to move between devices is the encrypted recovery-phrase envelope,
+  which the user creates on purpose with a password only they hold, and which
+  does not go through this mechanism.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

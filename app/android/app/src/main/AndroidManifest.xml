@@ -1,7 +1,33 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      Backup is off, on every path Android offers.
+
+      allowBackup defaults to true, which sends the app's data to Google Drive
+      and to device-to-device transfer. Two things make that wrong here.
+
+      The Supabase session and its PKCE verifier sit in ordinary
+      SharedPreferences, so they would be backed up in the clear and restored
+      onto whatever device the backup lands on.
+
+      And the seed's own storage is Keystore-backed, with a key that never
+      leaves the device it was made on. Restoring the ciphertext onto a
+      different device produces a decrypt failure against a key that is not
+      there — which is the exact scenario that used to make the plugin delete
+      the seed and drop the user into onboarding. That default is now off, but a
+      backup that can only ever restore unreadable data is still not a backup.
+
+      The real one is the encrypted recovery-phrase envelope, which the user
+      makes deliberately with a password only they know.
+
+      allowBackup covers Android 11 and below; dataExtractionRules covers 12 and
+      up, where cloud backup and device transfer are decided separately.
+    -->
     <application
         android:label="tip"
         android:name="${applicationName}"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
