@@ -166,17 +166,45 @@ void main() {
       );
     });
 
-    test('is stable across refactors', () {
+    test('is pinned to an exact value', () {
       // Self-generated, not a cross-implementation vector: this derivation is
       // ours, so no other client produces it. It is pinned so that an
       // accidental change to the domain tag, packing, or round count shows up
       // here instead of as notes that silently stop decrypting.
+      //
+      // This test used to assert only canonicality and hex length, which is
+      // what the comment above claims to prevent but does not: a mutated domain
+      // tag passed it. The literal is the assertion.
+      //
+      // Why it matters more than an ordinary golden value. `SetViewingKey` is
+      // immutable once written to the pool, so a wallet cannot re-register.
+      // Change this derivation and an existing wallet derives K', while the
+      // pool still holds pub(K): every channel key misses, discovery returns
+      // nothing, and the balance reads zero forever with no error anywhere to
+      // say why. There is no recovery path, so the only defence is that this
+      // test fails first.
       final key = deriveViewingKeyFromSeed(
         seed: List<int>.generate(32, (i) => i + 1),
         accountAddress: BigInt.parse('123456789abcdef', radix: 16),
       );
+      expect(
+        '0x${key.toRadixString(16)}',
+        '0xbbccf25c19d1edf3ccfc21052ddcd31f76bde02b775eef58e22699600391f3',
+      );
       expect(isCanonicalViewingKey(key), isTrue);
-      expect(key.toRadixString(16), hasLength(greaterThan(40)));
+    });
+
+    test('is pinned for a seed longer than one felt limb', () {
+      // The 31-byte packing boundary: a 64-byte seed spans three limbs, so this
+      // pins the length prefix and the limb loop as well as the domain tag.
+      final key = deriveViewingKeyFromSeed(
+        seed: List<int>.generate(64, (i) => i + 1),
+        accountAddress: BigInt.parse('123456789abcdef', radix: 16),
+      );
+      expect(
+        '0x${key.toRadixString(16)}',
+        '0x8d8c7d92db9d52d0ffe886f15e04ed36d9ed3d95baa1521738988a1a807b7c',
+      );
     });
   });
 
@@ -190,6 +218,22 @@ void main() {
           ),
         ),
         isTrue,
+      );
+    });
+
+    test('is pinned to an exact value', () {
+      // Pinned for the same reason as the seed path. This one additionally
+      // claims to match the reference client's 1000-round construction, and
+      // nothing in the repo checks that claim against the reference — so treat
+      // this literal as a regression guard on our own code, not as evidence of
+      // cross-client agreement.
+      final key = deriveViewingKeyFromPassphrase(
+        passphrase: 'correct horse battery staple',
+        accountAddress: BigInt.parse('123456789abcdef', radix: 16),
+      );
+      expect(
+        '0x${key.toRadixString(16)}',
+        '0x33e3d7b48c228dbdd192ea4de335d4fcc531195c9c3716c44ccc77b57baddda',
       );
     });
 
