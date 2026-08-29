@@ -114,6 +114,13 @@ class PrivacyController extends ChangeNotifier {
   /// balance; spending re-checks each note against the chain, because whether
   /// a note is spendable is a fact about the chain rather than about what a
   /// service chose to send.
+  /// Notes the service sent that we could not key to a channel, and so cannot
+  /// spend. Normally zero. A non-zero count means either a channel we have not
+  /// discovered yet or a note that is not ours, and either way it is honest to
+  /// leave it out of the balance rather than show money that cannot move.
+  int _unspendableNotes = 0;
+  int get unspendableNotes => _unspendableNotes;
+
   Future<void> refresh() async {
     final pool = session;
     if (pool == null) {
@@ -158,16 +165,16 @@ class PrivacyController extends ChangeNotifier {
       );
       client.close();
 
+      final keyed = keyIncomingNotes(
+        notes: incoming.notes,
+        channels: incoming.channels,
+        self: self,
+        selfChannelKey: channel.key,
+      );
+      _notes = keyed.notes;
+      _unspendableNotes = keyed.unspendable;
+
       _byToken.clear();
-      _notes = [
-        for (final note in incoming.notes)
-          tp.SpendableNote(
-            channelKey: channel.key,
-            token: note.token,
-            index: note.index,
-            amount: note.amount,
-          ),
-      ];
       for (final note in _notes) {
         _byToken[note.token] = (_byToken[note.token] ?? BigInt.zero) + note.amount;
       }
@@ -207,4 +214,81 @@ class PrivacyController extends ChangeNotifier {
     stopPolling();
     super.dispose();
   }
+}
+
+/// The result of matching discovered notes to the channels they belong to.
+class KeyedNotes {
+  const KeyedNotes({required this.notes, required this.unspendable});
+
+  /// Notes we hold the channel key for, deduplicated, ready to spend.
+  final List<tp.SpendableNote> notes;
+
+  /// How many the service sent that we could not key. Normally zero.
+  final int unspendable;
+}
+
+/// Matches each discovered note to the channel key it was created under.
+///
+/// A note belongs to the channel its *sender* opened to us, and the channel key
+/// is what `UseNote` is built against. This used to stamp every note with our
+/// own self-channel key, which is only correct for notes we created ourselves
+/// by shielding: a note from anybody else was counted in the balance and then
+/// could not be spent, because the `UseNote` it produced named a note id that
+/// does not exist on chain. The sender's key was in the response the whole
+/// time, in `channels`, and was being discarded.
+///
+/// The sender-to-key map is not trusted, it is checked. A note id is
+/// `h(NOTE_ID_TAG, channel_key, token, index, 0)`, so recomputing it with the
+/// key we picked and comparing against the id the service sent proves the key
+/// is the right one. A note that fails that check is not ours to spend, and
+/// crediting it would put a number on the home screen that no transaction can
+/// ever move.
+KeyedNotes keyIncomingNotes({
+  required List<tp.IncomingNote> notes,
+  required List<tp.IncomingChannel> channels,
+  required BigInt self,
+  required BigInt selfChannelKey,
+}) {
+  final channelKeyBySender = <BigInt, BigInt>{
+    // Seeded with our own, so shielding keeps working even if the service does
+    // not echo the self-channel back to us.
+    self: selfChannelKey,
+    for (final c in channels) c.senderAddr: c.channelKey,
+  };
+
+  final spendable = <tp.SpendableNote>[];
+  var unspendable = 0;
+
+  // Two notes with the same (channel, token, index) are the same note. The
+  // service paginates, and a page boundary that moves under a cursor can repeat
+  // one; spending it twice would build a batch the pool refuses.
+  final seen = <String>{};
+
+  for (final note in notes) {
+    final key = channelKeyBySender[note.senderAddr];
+    if (key == null) {
+      unspendable++;
+      continue;
+    }
+    final expected = tp.computeNoteId(
+      channelKey: key,
+      token: note.token,
+      index: note.index,
+    );
+    if (expected != note.noteId) {
+      unspendable++;
+      continue;
+    }
+    if (!seen.add('$key:${note.token}:${note.index}')) continue;
+    spendable.add(
+      tp.SpendableNote(
+        channelKey: key,
+        token: note.token,
+        index: note.index,
+        amount: note.amount,
+      ),
+    );
+  }
+
+  return KeyedNotes(notes: spendable, unspendable: unspendable);
 }
