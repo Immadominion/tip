@@ -34,12 +34,25 @@ const sealedSeedVersion = 1;
 
 /// Argon2id cost, as of 2026.
 ///
-/// OWASP's floor for interactive use: 19 MiB, two passes, no parallelism. It
-/// runs in well under a second on a mid-range phone, which matters because a
-/// backup nobody waits for is a backup nobody makes. Raising these later is
-/// safe: old blobs carry the numbers they were made with.
-const argonMemoryKib = 19456;
-const argonIterations = 2;
+/// 64 MiB, three passes, no parallelism — OWASP's second listed configuration
+/// rather than its 19 MiB floor.
+///
+/// The floor is sized for a password guarded by a login endpoint that can rate
+/// limit and lock out. This one is not: the sealed blob is held on a server, so
+/// a breach of that table hands an attacker every envelope and unlimited
+/// offline attempts against them. The only thing standing between a guess and a
+/// recovery phrase is how long each guess takes, which makes the cost the whole
+/// defence rather than one layer of several.
+///
+/// About a second on a mid-range phone, against well under one before. That is
+/// a real cost to a backup nobody waits for, and it buys roughly a threefold
+/// increase in memory and a fifty percent increase in passes against someone
+/// running the same computation a million times.
+///
+/// Raising these again later stays safe: every blob carries the numbers it was
+/// made with, so old backups keep opening at the cost they were sealed at.
+const argonMemoryKib = 65536;
+const argonIterations = 3;
 const argonParallelism = 1;
 
 /// Bytes of salt and nonce. Sixteen and twelve, which is what the primitives
@@ -199,8 +212,61 @@ class SeedVault {
       return 'Use at least $minimumPasswordLength characters. This password is '
           'the only thing protecting your backup, and nobody can reset it.';
     }
+
+    // Length alone let `aaaaaaaaaaaa` through, which is twelve characters and
+    // one guess. These reject the shapes that are long and still trivial,
+    // without demanding a symbol and a capital — that rule reliably produces
+    // `P@ssw0rd1`, which is worse than the passphrase it discourages.
+    final distinct = password.split('').toSet().length;
+    if (distinct < 5) {
+      return 'Too few different characters. A few unrelated words are easier '
+          'to remember and far harder to guess.';
+    }
+
+    if (_isSequential(password)) {
+      return 'That is a keyboard or alphabet run, which is one of the first '
+          'things a guessing program tries.';
+    }
+
+    final lower = password.toLowerCase();
+    if (_commonPasswords.any((common) => lower == common)) {
+      return 'That password appears on every list of common passwords.';
+    }
+
     return null;
   }
+
+  /// Whether the whole string steps by a constant amount, in either direction.
+  ///
+  /// Catches `123456789012` and `abcdefghijkl`, and their reverses, which pass
+  /// both a length check and a distinct-character check while being about as
+  /// guessable as a password gets.
+  static bool _isSequential(String password) {
+    if (password.length < 4) return false;
+    final step = password.codeUnitAt(1) - password.codeUnitAt(0);
+    if (step != 1 && step != -1) return false;
+    for (var i = 2; i < password.length; i++) {
+      if (password.codeUnitAt(i) - password.codeUnitAt(i - 1) != step) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Not a wordlist, and not pretending to be one. Just the handful long enough
+  /// to clear the length check, so that the most obvious answers do not.
+  static const _commonPasswords = {
+    'password1234',
+    'passwordpassword',
+    'qwertyuiop12',
+    'qwertyuiopasdfgh',
+    'letmeinletmein',
+    'iloveyouiloveyou',
+    'administrator',
+    'welcome123456',
+    '123456789012',
+    'aaaaaaaaaaaa',
+  };
 
   /// Seals [mnemonic] under [password].
   ///

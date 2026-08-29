@@ -19,6 +19,7 @@ const _password = 'correct horse battery staple';
 final _phrase = WalletFactory.generateMnemonic();
 
 void main() {
+  _passwordStrength();
   group('round trip', () {
     test('a sealed phrase comes back exactly', () async {
       final sealed = await _vault.seal(
@@ -163,9 +164,16 @@ void main() {
     });
 
     test('the minimum is exactly the advertised length', () {
-      expect(SeedVault.passwordProblem('a' * minimumPasswordLength), isNull);
+      // Checked with a password that is only *short* by one, rather than with
+      // a run of one character. This test used to use 'a' * 12 and assert it
+      // was acceptable, which encoded the weakness it looked like it was
+      // guarding: twelve identical characters is one guess, and it passed
+      // because length was the only rule. See the password strength group.
+      const fine = 'rustyanchor9';
+      expect(fine.length, minimumPasswordLength);
+      expect(SeedVault.passwordProblem(fine), isNull);
       expect(
-        SeedVault.passwordProblem('a' * (minimumPasswordLength - 1)),
+        SeedVault.passwordProblem(fine.substring(0, fine.length - 1)),
         isNotNull,
       );
     });
@@ -253,6 +261,54 @@ void main() {
         await vault.open(sealed: a, password: _password),
         equals('abandon abandon abandon'),
       );
+    });
+  });
+}
+
+void _passwordStrength() {
+  group('password strength', () {
+    // Length alone let twelve identical characters through, which is one guess.
+    // These are the shapes that are long and still trivial.
+    for (final weak in [
+      'aaaaaaaaaaaa',
+      'abababababab',
+      '111111111111',
+      '123456789012',
+      'abcdefghijkl',
+      'password1234',
+    ]) {
+      test('"$weak" is refused', () {
+        expect(SeedVault.passwordProblem(weak), isNotNull);
+      });
+    }
+
+    test('a passphrase passes, because it is the shape we want', () {
+      expect(
+        SeedVault.passwordProblem('correct horse battery staple'),
+        isNull,
+      );
+    });
+
+    test('an ordinary strong password passes', () {
+      expect(SeedVault.passwordProblem('rusty-anchor-99'), isNull);
+    });
+
+    test('it does not demand a symbol and a capital', () {
+      // That rule reliably produces P@ssw0rd1, which is worse than the
+      // passphrase it discourages.
+      expect(SeedVault.passwordProblem('thirteenletters'), isNull);
+    });
+
+    test('short is still refused first', () {
+      expect(SeedVault.passwordProblem('short'), contains('12 characters'));
+    });
+
+    test('the production cost is at least OWASP second tier', () {
+      // The sealed blob is held on a server, so a breach hands an attacker
+      // every envelope and unlimited offline attempts. The cost is the whole
+      // defence rather than one layer of several.
+      expect(Argon2Cost.production.memoryKib, greaterThanOrEqualTo(65536));
+      expect(Argon2Cost.production.iterations, greaterThanOrEqualTo(3));
     });
   });
 }
