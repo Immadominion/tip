@@ -9,6 +9,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:tip_privacy/tip_privacy.dart';
+import 'package:tip_privacy/tip_privacy.dart' as tp;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:starknet/starknet.dart';
 import 'package:tip/src/activity/activity_entry.dart';
@@ -207,6 +208,7 @@ void main() {
 
   _heroTests();
   _transportTests();
+  _boundsTests();
 }
 
 void _heroTests() {
@@ -282,6 +284,57 @@ void _transportTests() {
         pinnedOhttpKey: Uint8List.fromList([1, 2, 3]),
       );
       expect(pinned.pinnedOhttpKey, equals([1, 2, 3]));
+    });
+  });
+}
+
+void _boundsTests() {
+  group('submission ceilings', () {
+    // Measured from three real Sepolia submissions: l1_gas 0, l2_gas between
+    // 80 and 86 million, l1_data_gas under 1,500, actual fee about 2.8 STRK.
+    final l2Used = BigInt.from(86000000);
+    final dataUsed = BigInt.from(1500);
+
+    tp.ResourceBounds bounds() => const tp.ResourceBounds(
+          l1Gas: tp.ResourceBound(maxAmount: '0x2710', maxPricePerUnit: '0x1'),
+          l1DataGas:
+              tp.ResourceBound(maxAmount: '0x4e20', maxPricePerUnit: '0x1'),
+          l2Gas:
+              tp.ResourceBound(maxAmount: '0xbebc200', maxPricePerUnit: '0x1'),
+        );
+
+    BigInt amount(tp.ResourceBound b) =>
+        BigInt.parse(b.maxAmount.replaceFirst('0x', ''), radix: 16);
+
+    test('cover what real submissions actually used', () {
+      expect(amount(bounds().l2Gas), greaterThan(l2Used));
+      expect(amount(bounds().l1DataGas), greaterThan(dataUsed));
+    });
+
+    test('do not cover it so generously that nobody can pay the ceiling', () {
+      // The bug this exists for. Validation requires the account to hold the
+      // whole ceiling, not the fee it will pay, so an over-generous bound
+      // makes the transaction unsubmittable. The first version asked for 78
+      // STRK and was refused by an account holding 77.
+      expect(
+        amount(bounds().l2Gas),
+        lessThan(l2Used * BigInt.from(4)),
+        reason: 'more than about four times measured usage is waste that the '
+            'account still has to hold',
+      );
+    });
+
+    test('the ceiling is the sum of each resource at its bound', () {
+      final session = _StubSession(publicKey: BigInt.one);
+      // Prices of one, so the total is just the amounts.
+      expect(
+        session.maxFeeFor(bounds()),
+        equals(
+          amount(bounds().l1Gas) +
+              amount(bounds().l1DataGas) +
+              amount(bounds().l2Gas),
+        ),
+      );
     });
   });
 }

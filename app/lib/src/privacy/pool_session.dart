@@ -367,9 +367,17 @@ class PoolSession {
 
   /// Ceilings for a proved submission.
   ///
-  /// Deliberately generous. Verifying a proof is heavy, the account pays what
-  /// execution uses rather than the ceiling, and a transaction rejected for a
-  /// low ceiling wastes a proof that took the better part of a minute.
+  /// Sized from measurement, not from caution. Three real submissions on
+  /// Sepolia used l1_gas 0, l2_gas between 80 and 86 million, and l1_data_gas
+  /// under 1,500, for an actual fee of about 2.8 STRK each. The bounds below
+  /// are roughly twice the dominant term.
+  ///
+  /// Being generous here is not free, which is the part that is easy to miss.
+  /// Validation requires the account to hold the entire ceiling, not the fee
+  /// it will actually pay, so an ceiling of a hundred STRK makes the
+  /// transaction unsubmittable by anyone holding less than that. The first
+  /// version of this asked for 78 STRK and was refused by an account holding
+  /// 77, having paid nothing and learnt nothing.
   Future<tp.ResourceBounds> _submissionBounds() async {
     final header =
         await _rpcResult('starknet_getBlockWithTxHashes', ['latest'])
@@ -379,19 +387,38 @@ class PoolSession {
         '0x1';
 
     return tp.ResourceBounds(
+      // Measured at zero. A small allowance rather than none, since a bound of
+      // zero leaves no room for a change in how the pool settles.
       l1Gas: tp.ResourceBound(
-        maxAmount: '0x30d40',
+        maxAmount: '0x2710',
         maxPricePerUnit: price('l1_gas_price'),
       ),
+      // Measured at about 1,500.
       l1DataGas: tp.ResourceBound(
-        maxAmount: '0x30d40',
+        maxAmount: '0x4e20',
         maxPricePerUnit: price('l1_data_gas_price'),
       ),
+      // Measured at 80 to 86 million. Verifying a proof is the whole cost of
+      // this transaction, so this is the term that matters.
       l2Gas: tp.ResourceBound(
-        maxAmount: '0x3b9aca00',
+        maxAmount: '0xbebc200',
         maxPricePerUnit: price('l2_gas_price'),
       ),
     );
+  }
+
+  /// The most this submission could cost, at the ceilings above.
+  ///
+  /// Checked before signing so that a wallet which cannot cover it is told
+  /// why, rather than being handed the node's "Resources bounds exceed
+  /// balance", which names a number without saying what to do about it.
+  BigInt maxFeeFor(tp.ResourceBounds bounds) {
+    BigInt product(tp.ResourceBound bound) =>
+        BigInt.parse(bound.maxAmount.replaceFirst('0x', ''), radix: 16) *
+        BigInt.parse(bound.maxPricePerUnit.replaceFirst('0x', ''), radix: 16);
+    return product(bounds.l1Gas) +
+        product(bounds.l1DataGas) +
+        product(bounds.l2Gas);
   }
 
   Future<Object?> _rpcResult(String method, Object params) async {
