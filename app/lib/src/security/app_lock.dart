@@ -39,6 +39,11 @@ class AppLock {
   /// that silently turns itself off is worse than one that fails loudly.
   static const _androidOptions = AndroidOptions(resetOnError: false);
 
+  /// Exposed so a test can assert the serialized map, which is what the plugin
+  /// actually sends across the channel. Asserting the Dart field would miss a
+  /// change in how it is forwarded.
+  static AndroidOptions get androidOptionsForTest => _androidOptions;
+
   /// Whether the device can authenticate at all.
   ///
   /// True for a device passcode alone, not only for biometrics: a phone with

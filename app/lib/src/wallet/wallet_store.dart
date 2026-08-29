@@ -51,6 +51,11 @@ class WalletStore {
   /// user adds or removes a fingerprint, which would strand the wallet.
   static const _androidOptions = AndroidOptions(resetOnError: false);
 
+  /// Exposed so a test can assert the serialized map, which is what the plugin
+  /// actually sends across the channel. Asserting the Dart field would miss a
+  /// change in how it is forwarded.
+  static AndroidOptions get androidOptionsForTest => _androidOptions;
+
   Future<bool> hasSeed() async =>
       await _storage.read(
         key: _seedKey,
