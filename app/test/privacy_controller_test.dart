@@ -337,4 +337,36 @@ void _boundsTests() {
       );
     });
   });
+  group('a self-hosted prover', () {
+    // OHTTP hides who is asking from the service being asked. A prover you run
+    // yourself is not that service, and the bare binary has no gateway in
+    // front of it, so requiring one would mean not being able to talk to it.
+    PoolConfig config({required bool selfHosted}) => PoolConfig(
+          poolAddress: BigInt.from(0x1234),
+          provingUrl: Uri.parse('https://prover.test'),
+          discoveryUrl: Uri.parse('https://discovery.test'),
+          rpcUrl: Uri.parse('https://node.test'),
+          selfHostedProver: selfHosted,
+        );
+
+    test('is off unless a build says otherwise', () {
+      expect(config(selfHosted: false).selfHostedProver, isFalse);
+    });
+
+    test('discovery stays encrypted either way', () {
+      // The discovery service carries the viewing key and is somebody else's
+      // no matter who runs the prover, so this flag must not reach it.
+      final session = PoolSession(
+        config: config(selfHosted: true),
+        keys: _keys(),
+        chainId: TipNetwork.sepolia.chainId,
+        feeToken: TipNetwork.sepolia.feeToken.address.toBigInt(),
+      );
+      expect(
+        session.transportTo(session.config.discoveryUrl),
+        isA<tp.OhttpTransport>(),
+      );
+    });
+  });
+
 }

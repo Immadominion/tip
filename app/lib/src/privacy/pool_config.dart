@@ -10,7 +10,8 @@
 ///     --dart-define=STRK20_PROVER=https://... \
 ///     --dart-define=STRK20_DISCOVERY=https://... \
 ///     --dart-define=STRK20_RPC=https://... \
-///     --dart-define=STRK20_OHTTP_KEY=BASE64_KEY_CONFIG
+///     --dart-define=STRK20_OHTTP_KEY=BASE64_KEY_CONFIG \
+///     --dart-define=STRK20_SELF_HOSTED_PROVER=true
 library;
 
 import 'dart:convert';
@@ -23,6 +24,7 @@ class PoolConfig {
     required this.discoveryUrl,
     required this.rpcUrl,
     this.pinnedOhttpKey,
+    this.selfHostedProver = false,
   });
 
   /// Reads the configuration a build was given, or null when it was given none.
@@ -40,6 +42,8 @@ class PoolConfig {
       return null;
     }
     const pinned = String.fromEnvironment('STRK20_OHTTP_KEY');
+    const selfHosted =
+        bool.fromEnvironment('STRK20_SELF_HOSTED_PROVER');
 
     return PoolConfig(
       poolAddress: BigInt.parse(pool.replaceFirst('0x', ''), radix: 16),
@@ -48,6 +52,7 @@ class PoolConfig {
       rpcUrl: Uri.parse(rpc),
       pinnedOhttpKey:
           pinned.isEmpty ? null : Uint8List.fromList(base64.decode(pinned)),
+      selfHostedProver: selfHosted,
     );
   }
 
@@ -70,6 +75,20 @@ class PoolConfig {
   /// OHTTP still hides the payload from a passive observer and from a CDN that
   /// is merely careless; pinned OHTTP is what holds against one that is not.
   final Uint8List? pinnedOhttpKey;
+
+  /// Whether the prover at [provingUrl] is one this build's operator runs.
+  ///
+  /// It changes the transport, and it is worth being exact about why. OHTTP
+  /// exists to keep a service from learning who is asking. A prover you run
+  /// yourself is not that service: there is nobody on the other end to hide
+  /// from, and the bare prover has no OHTTP gateway in front of it, so
+  /// insisting on one would mean the wallet could not talk to it at all.
+  ///
+  /// This is deliberately not inferred by probing for `/ohttp-keys`. A probe
+  /// would silently drop to a plain transport whenever a gateway was
+  /// unreachable, which is the one moment the protection matters most. Giving
+  /// up encryption should take somebody deciding to.
+  final bool selfHostedProver;
 
   String get poolHex => '0x${poolAddress.toRadixString(16)}';
 }

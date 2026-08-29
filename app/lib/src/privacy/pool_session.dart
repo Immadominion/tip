@@ -214,7 +214,7 @@ class PoolSession {
     // Over OHTTP: a proving request carries the whole transaction about to be
     // submitted, so a plain transport tells whoever terminates TLS exactly
     // what is coming and when.
-    final client = tp.ProvingClient(transport: transportTo(config.provingUrl));
+    final client = tp.ProvingClient(transport: _proverTransport());
     try {
       return await client.proveTransaction(
         blockId: {'block_number': tp.provingBlockFor(head)},
@@ -236,10 +236,7 @@ class PoolSession {
   /// failure of the reporting.
   Future<bool> proverReachable() async {
     final client = tp.ProvingClient(
-      transport: transportTo(
-        config.provingUrl,
-        timeout: const Duration(seconds: 10),
-      ),
+      transport: _proverTransport(timeout: const Duration(seconds: 10)),
       retryPolicy: tp.ProvingRetryPolicy.none,
     );
     try {
@@ -373,6 +370,21 @@ class PoolSession {
   /// OHTTP rather than plain JSON. Both the discovery request and the proving
   /// request carry things that must not be readable by infrastructure in the
   /// middle: the viewing key in one, the pending transaction in the other.
+  /// The transport to the prover.
+  ///
+  /// Encrypted unless the operator has said they run the prover themselves,
+  /// in which case there is no third party to be oblivious to and the bare
+  /// service has no gateway to be oblivious through. See
+  /// [PoolConfig.selfHostedProver] for why this is declared rather than
+  /// detected.
+  tp.DiscoveryTransport _proverTransport({Duration? timeout}) =>
+      config.selfHostedProver
+          ? tp.PlainJsonTransport(
+              baseUrl: config.provingUrl,
+              timeout: timeout ?? tp.defaultRequestTimeout,
+            )
+          : transportTo(config.provingUrl, timeout: timeout);
+
   /// An encrypted transport to [service].
   ///
   /// [timeout] is shorter than the default only for calls that are meant to
