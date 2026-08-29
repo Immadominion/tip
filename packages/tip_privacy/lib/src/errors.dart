@@ -42,6 +42,28 @@ class DiscoveryException extends PrivacyException {
   }
 }
 
+/// The request never reached the service, or the service never answered.
+///
+/// Distinct from every other error here, and the distinction is the point: a
+/// [DiscoveryException] or a [ProvingException] means a service considered the
+/// request and said no, so the answer will not change by asking again. This
+/// means nobody answered, so nothing was considered and nothing happened. A
+/// wallet can say that plainly to the user, which matters most at the proving
+/// step, where a failure that leaves funds untouched otherwise looks identical
+/// to one that does not.
+class TransportException extends PrivacyException {
+  const TransportException(super.message, {required this.host, this.timedOut = false});
+
+  /// Who we were trying to reach, for a message that names it.
+  final String host;
+
+  /// Whether the request was abandoned rather than refused.
+  final bool timedOut;
+
+  @override
+  String toString() => 'TransportException: $message';
+}
+
 /// A response could not be parsed into the shape the API contract promises.
 class ProtocolException extends PrivacyException {
   const ProtocolException(super.message);

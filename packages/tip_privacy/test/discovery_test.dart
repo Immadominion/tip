@@ -2,6 +2,8 @@
 /// cover pagination, reorg handling, and error mapping without a network.
 library;
 
+import 'dart:async';
+
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:test/test.dart';
@@ -533,6 +535,76 @@ void _retryTests() {
       expect(
         () => transport.get('/health'),
         throwsA(isA<DiscoveryException>()),
+      );
+    });
+
+    test('a connection that never lands is retried, then named', () async {
+      // What a wallet sees when the service is down rather than merely busy.
+      // It used to escape as a raw http.ClientException, which reached the
+      // screen as a stack-trace-shaped string.
+      var calls = 0;
+      final transport = PlainJsonTransport(
+        baseUrl: Uri.parse('https://example.test'),
+        client: MockClient((_) async {
+          calls++;
+          throw http.ClientException('Connection refused');
+        }),
+        sleep: noSleep,
+      );
+
+      await expectLater(
+        transport.get('/health'),
+        throwsA(
+          isA<TransportException>()
+              .having((e) => e.host, 'host', 'example.test')
+              .having((e) => e.timedOut, 'timedOut', isFalse),
+        ),
+      );
+      expect(calls, 4, reason: 'the initial attempt plus three retries');
+    });
+
+    test('a connection that recovers is not surfaced at all', () async {
+      var calls = 0;
+      final transport = PlainJsonTransport(
+        baseUrl: Uri.parse('https://example.test'),
+        client: MockClient((_) async {
+          if (calls++ == 0) throw http.ClientException('Connection reset');
+          return http.Response('{"status":"OK"}', 200);
+        }),
+        sleep: noSleep,
+      );
+      expect(await transport.get('/health'), equals({'status': 'OK'}));
+    });
+
+    test('a request that hangs is abandoned and says so', () async {
+      final transport = PlainJsonTransport(
+        baseUrl: Uri.parse('https://example.test'),
+        client: MockClient((_) => Completer<http.Response>().future),
+        retryPolicy: DiscoveryRetryPolicy.none,
+        timeout: const Duration(milliseconds: 20),
+        sleep: noSleep,
+      );
+      await expectLater(
+        transport.get('/health'),
+        throwsA(
+          isA<TransportException>()
+              .having((e) => e.timedOut, 'timedOut', isTrue),
+        ),
+      );
+    });
+
+    test('a malformed body is still a protocol error, not a network one', () {
+      // The classifier has to leave real answers alone. Reporting a service
+      // that replied with nonsense as unreachable would send the user to check
+      // their signal for a bug on the server.
+      final transport = PlainJsonTransport(
+        baseUrl: Uri.parse('https://example.test'),
+        client: MockClient((_) async => http.Response('not json', 200)),
+        sleep: noSleep,
+      );
+      expect(
+        () => transport.get('/health'),
+        throwsA(isA<ProtocolException>()),
       );
     });
 

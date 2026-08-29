@@ -11,6 +11,7 @@
 /// transport exposes it to whatever terminates TLS.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -68,6 +69,7 @@ class PlainJsonTransport implements DiscoveryTransport {
     required Uri baseUrl,
     http.Client? client,
     this.retryPolicy = const DiscoveryRetryPolicy(),
+    this.timeout = defaultRequestTimeout,
     Future<void> Function(Duration)? sleep,
   })  : _baseUrl = baseUrl,
         _client = client ?? http.Client(),
@@ -78,6 +80,10 @@ class PlainJsonTransport implements DiscoveryTransport {
   final http.Client _client;
   final bool _ownsClient;
   final DiscoveryRetryPolicy retryPolicy;
+
+  /// How long to wait for one attempt before giving up on it.
+  final Duration timeout;
+
   final Future<void> Function(Duration) _sleep;
 
   Uri _resolve(String path) =>
@@ -113,7 +119,22 @@ class PlainJsonTransport implements DiscoveryTransport {
     Future<(int, String)> Function() send,
   ) async {
     for (var attempt = 0;; attempt++) {
-      final (status, body) = await send();
+      final int status;
+      final String body;
+      try {
+        (status, body) = await send().timeout(timeout);
+      } on Object catch (error) {
+        // A connection that never completed is exactly the case the retry
+        // policy exists for, and it is also the one that used to escape as a
+        // raw platform exception with a stack trace in it.
+        final failure = transportFailureFor(error, _baseUrl);
+        if (failure == null || attempt >= retryPolicy.maxRetries) {
+          throw failure ?? error;
+        }
+        await _sleep(retryPolicy.delayFor(attempt));
+        continue;
+      }
+
       if (!transientStatusCodes.contains(status) ||
           attempt >= retryPolicy.maxRetries) {
         return _decode(path, status, body);
@@ -177,6 +198,36 @@ String? _errorCodeOf(String body) {
     }
   } on FormatException {
     // Error bodies are not guaranteed to be JSON; the message is enough.
+  }
+  return null;
+}
+
+/// Default ceiling on a single request.
+///
+/// Generous on purpose. Proving a batch takes the better part of a minute on
+/// the reference deployment, so a timeout tuned for an ordinary API call would
+/// abandon a request that was going to succeed.
+const Duration defaultRequestTimeout = Duration(seconds: 120);
+
+/// Classifies a thrown [error] as a transport failure, or returns null.
+///
+/// Null means "not ours": a [PrivacyException] raised while decoding, or
+/// anything else that is a real answer rather than a failure to get one. Those
+/// must propagate unchanged rather than be reported as the network being down.
+TransportException? transportFailureFor(Object error, Uri target) {
+  final host = target.host.isEmpty ? target.toString() : target.host;
+  if (error is TimeoutException) {
+    return TransportException(
+      '$host did not answer in time',
+      host: host,
+      timedOut: true,
+    );
+  }
+  if (error is http.ClientException) {
+    return TransportException(
+      'Could not reach $host: ${error.message}',
+      host: host,
+    );
   }
   return null;
 }

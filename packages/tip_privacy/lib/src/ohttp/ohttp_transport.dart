@@ -5,6 +5,7 @@
 /// plaintext to private transport is a one-line change at construction.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -31,6 +32,7 @@ class OhttpTransport implements DiscoveryTransport {
     Uri? relayUrl,
     Uint8List? pinnedKeyConfig,
     http.Client? client,
+    this.timeout = defaultRequestTimeout,
   })  : _gatewayUrl = gatewayUrl,
         _relayUrl = relayUrl,
         _pinnedKeyConfig = pinnedKeyConfig,
@@ -56,6 +58,9 @@ class OhttpTransport implements DiscoveryTransport {
 
   final http.Client _client;
   final bool _ownsClient;
+
+  /// How long to wait for the gateway before giving up.
+  final Duration timeout;
 
   OhttpKeyConfig? _config;
 
@@ -96,11 +101,18 @@ class OhttpTransport implements DiscoveryTransport {
         await encapsulateRequest(config: config, request: request);
 
     final target = _relayUrl ?? _gatewayUrl;
-    final response = await _client.post(
-      target,
-      headers: const {'content-type': 'message/ohttp-req'},
-      body: encapsulated.body,
-    );
+    final http.Response response;
+    try {
+      response = await _client
+          .post(
+            target,
+            headers: const {'content-type': 'message/ohttp-req'},
+            body: encapsulated.body,
+          )
+          .timeout(timeout);
+    } on Object catch (error) {
+      throw transportFailureFor(error, target) ?? error;
+    }
 
     // A decapsulation failure arrives in the clear, since the gateway never got
     // far enough to encrypt a reply. Usually it means the key config rotated
@@ -142,7 +154,12 @@ class OhttpTransport implements DiscoveryTransport {
       final url = _gatewayUrl.replace(
         path: '${_gatewayUrl.path}/ohttp-keys'.replaceAll('//', '/'),
       );
-      final response = await _client.get(url);
+      final http.Response response;
+      try {
+        response = await _client.get(url).timeout(timeout);
+      } on Object catch (error) {
+        throw transportFailureFor(error, url) ?? error;
+      }
       if (response.statusCode != 200) {
         throw DiscoveryException(
           'Could not fetch the OHTTP key configuration',
