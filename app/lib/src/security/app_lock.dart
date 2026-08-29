@@ -34,7 +34,10 @@ class AppLock {
   static const _iosOptions = IOSOptions(
     accessibility: KeychainAccessibility.unlocked_this_device,
   );
-  static const _androidOptions = AndroidOptions();
+  /// `resetOnError: false`. The plugin's default deletes on a failed read, and
+  /// a deleted lock preference reads as "lock disabled" — a security control
+  /// that silently turns itself off is worse than one that fails loudly.
+  static const _androidOptions = AndroidOptions(resetOnError: false);
 
   /// Whether the device can authenticate at all.
   ///

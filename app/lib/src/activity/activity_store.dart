@@ -27,7 +27,11 @@ class ActivityStore {
   static const _iosOptions = IOSOptions(
     accessibility: KeychainAccessibility.unlocked_this_device,
   );
-  static const _androidOptions = AndroidOptions();
+  /// `resetOnError: false` for the same reason as the seed store: the plugin
+  /// defaults it to true and deletes the entry on a failed read. Losing the
+  /// activity log is not losing money, but it is the only record of the
+  /// transactions Starknet's RPC cannot be re-asked about.
+  static const _androidOptions = AndroidOptions(resetOnError: false);
 
   Future<List<ActivityEntry>> read() async => ActivityEntry.decodeAll(
         await _storage.read(
