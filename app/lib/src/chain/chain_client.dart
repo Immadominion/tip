@@ -92,6 +92,13 @@ class ChainClient {
   final TipNetwork network;
   final List<JsonRpcProvider> _providers;
 
+  /// How long one endpoint gets before we try the next.
+  ///
+  /// Generous, because a slow node is still better than no node, and short
+  /// enough that trying every endpoint stays inside a person's patience rather
+  /// than inside a network stack's.
+  static const readTimeout = Duration(seconds: 15);
+
   /// The provider an [Account] signs and submits through.
   ///
   /// Only the first endpoint, deliberately. Failover is safe for reads and
@@ -107,7 +114,13 @@ class ChainClient {
     Object? lastError;
     for (final provider in _providers) {
       try {
-        return await body(provider);
+        // The timeout is what makes the failover work at all. Without it a
+        // black-holed socket — the commonest mobile failure, and what a captive
+        // portal or a dead endpoint actually looks like — hangs here forever
+        // rather than throwing, so the loop never reaches the next endpoint and
+        // the caller never returns. The SDK's own http.post has no timeout
+        // either, so there is nothing underneath this to fall back on.
+        return await body(provider).timeout(readTimeout);
       } on ChainException {
         rethrow;
       } catch (error) {

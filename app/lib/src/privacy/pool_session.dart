@@ -18,6 +18,7 @@
 /// that moves value in has to approve first, in the same multicall.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -511,8 +512,19 @@ class PoolSession {
     return response['result'];
   }
 
+  /// How long the node gets to answer.
+  ///
+  /// There is only one RPC URL on this path — unlike the public wallet, which
+  /// falls through a list — so a hang here has nothing to fail over to and
+  /// simply never returns. The controller's refresh guard would then stay held
+  /// forever, which also disables the poll and the pull-to-refresh the UI tells
+  /// the user to try.
+  static const rpcTimeout = Duration(seconds: 20);
+
   Future<Map<String, dynamic>> _rpc(String method, Object params) async {
-    final client = HttpClient();
+    final client = HttpClient()
+      ..connectionTimeout = rpcTimeout
+      ..idleTimeout = rpcTimeout;
     try {
       final request = await client.postUrl(config.rpcUrl);
       request.headers.contentType = ContentType.json;
@@ -522,9 +534,17 @@ class PoolSession {
         'method': method,
         'params': params,
       }));
-      final response = await request.close();
-      return jsonDecode(await response.transform(utf8.decoder).join())
-          as Map<String, dynamic>;
+      final response = await request.close().timeout(rpcTimeout);
+      final body = await response
+          .transform(utf8.decoder)
+          .join()
+          .timeout(rpcTimeout);
+      return jsonDecode(body) as Map<String, dynamic>;
+    } on TimeoutException {
+      throw PoolException(
+        'The Starknet node did not answer in time',
+        detail: '$method against ${config.rpcUrl}',
+      );
     } finally {
       client.close();
     }
