@@ -26,6 +26,39 @@ enum ActivityKind {
 
   /// Sweeping a claim link into this wallet.
   claim,
+
+  /// Registering the viewing key. Once per wallet, and the step everything on
+  /// the shielded side depends on.
+  register,
+
+  /// Moving money into the pool. Public, like every deposit.
+  shield,
+
+  /// A private transfer. The entry exists on this device only.
+  privateSend,
+
+  /// Moving money back out of the pool.
+  unshield,
+}
+
+/// Whether this kind of entry is one the chain cannot be re-asked about.
+///
+/// Starknet's RPC cannot be queried for the transactions involving an address,
+/// which is why this log exists at all. For the shielded operations it is worse
+/// than inconvenient: the whole point of a private transfer is that it is not
+/// legible on chain, so if this device does not record it, nothing anywhere
+/// does. That made the omission of these four kinds the sharpest edge of the
+/// gap — the one class of transaction that cannot be recovered was the one the
+/// log left out.
+extension ActivityKindPrivacy on ActivityKind {
+  bool get isPrivate => switch (this) {
+        ActivityKind.register ||
+        ActivityKind.shield ||
+        ActivityKind.privateSend ||
+        ActivityKind.unshield =>
+          true,
+        _ => false,
+      };
 }
 
 enum ActivityStatus { pending, succeeded, reverted, unknown }
@@ -58,6 +91,30 @@ class ActivityEntry {
         tokenSymbol: amount.token.symbol,
         tokenDecimals: amount.token.decimals,
         rawAmount: amount.raw.toString(),
+        counterparty: counterparty,
+      );
+
+  /// A pool operation.
+  ///
+  /// [counterparty] is deliberately optional and deliberately not defaulted to
+  /// the wallet's own address: for a private send the recipient is the one
+  /// thing worth remembering locally, and for a shield or an unshield to self
+  /// there is nobody to name.
+  factory ActivityEntry.pool({
+    required String txHash,
+    required ActivityKind kind,
+    required DateTime submittedAt,
+    TokenAmount? amount,
+    String? counterparty,
+  }) =>
+      ActivityEntry(
+        txHash: txHash,
+        kind: kind,
+        submittedAt: submittedAt,
+        status: ActivityStatus.pending,
+        tokenSymbol: amount?.token.symbol,
+        tokenDecimals: amount?.token.decimals,
+        rawAmount: amount?.raw.toString(),
         counterparty: counterparty,
       );
 
