@@ -54,3 +54,7 @@ packages/*/pubspec.lock
 # endpoints that are not ours to publish.
 .strk20-env.json
 .dev-account.json
+
+# Android release signing. The app's identity, and unrotatable.
+app/android/key.properties
+*.jks

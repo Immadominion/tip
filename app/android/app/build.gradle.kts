@@ -1,8 +1,24 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Release signing, read from android/key.properties, which is gitignored.
+//
+// A signing key is the app's identity: it is what App Links verify against and
+// what Play uses to decide that an update is from the same author. It cannot be
+// rotated after publishing without orphaning every existing install, so it is
+// the one secret in this project that must never be committed.
+//
+// See android/key.properties.example for how to make one.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("key.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val hasReleaseKey = keystoreProperties.getProperty("storeFile") != null
 
 android {
     namespace = "xyz.usetip.tip"
@@ -29,11 +45,40 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = keystoreProperties.getProperty("storeFile")
+                    ?.let { rootProject.file(it) }
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (hasReleaseKey) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                // Falls back to the debug key so `flutter run --release` still
+                // works on a fresh clone, and says so loudly rather than
+                // producing an artifact that looks shippable and is not.
+                //
+                // A debug-signed release cannot go to Play, and every Android
+                // debug keystore uses the password "android", so an App Link
+                // delegated to one is delegated to a key that is not a secret.
+                // site/.well-known/assetlinks.json currently publishes exactly
+                // this fingerprint; it has to be replaced with the real one
+                // before tip:// links can be trusted on Android.
+                logger.warn(
+                    "\n  WARNING: signing the release build with the DEBUG key." +
+                    "\n  Not shippable, and not a real app identity." +
+                    "\n  See android/key.properties.example.\n"
+                )
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
     }
 }

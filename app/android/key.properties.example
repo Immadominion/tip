@@ -1,0 +1,19 @@
+# Copy to android/key.properties and fill in. That file is gitignored: a signing
+# key is the app's identity, cannot be rotated after publishing without
+# orphaning every install, and is the one secret here that must never be
+# committed.
+#
+# Make one:
+#
+#   keytool -genkey -v -keystore ~/tip-release.jks \
+#     -keyalg RSA -keysize 4096 -validity 10000 -alias tip
+#
+# Then read its fingerprint and put that in site/.well-known/assetlinks.json,
+# replacing the debug one that is published there now:
+#
+#   keytool -list -v -keystore ~/tip-release.jks -alias tip | grep SHA256
+
+storeFile=/absolute/path/to/tip-release.jks
+storePassword=
+keyAlias=tip
+keyPassword=
