@@ -77,6 +77,9 @@
   }
   footer a { color: var(--faint); }
   footer a:hover { color: var(--accent); }
+  .hashes { list-style: none; padding: 0; margin: 0 0 1rem; }
+  .hashes li { margin: 0 0 .35rem; font-size: .82rem; line-height: 1.5; }
+  .hashes code { word-break: break-all; }
 </style>
 </head>
 <body>
@@ -105,10 +108,21 @@
      protocol&rsquo;s own contracts and the published RFCs.</p>
 
   <div class="card">
-    <p><strong>Shielded transfers are not live yet.</strong> They need a
-       proving service, and no public endpoint for one is published. Until that
-       resolves the wallet says a shielded balance is unavailable rather than
-       showing you a zero it cannot vouch for.</p>
+    <p><strong>Shielded transfers work, and have been done for real.</strong>
+       On Sepolia, against the live pool: a viewing key registered, a deposit
+       shielded, a private transfer to another wallet, and an unshield back
+       out. The balance tracked every move. Each one is checkable:</p>
+    <ul class="hashes">
+      <li>register &mdash; <code>0x27db4ee66b994c211f31326361bdb8d44740f95262be4c6ace563ec5ca5e59f</code></li>
+      <li>shield &mdash; <code>0x3be9a8a80607f1403359a8468bd9ac6dcd7200f5dbfe1ff290945187fefd295</code></li>
+      <li>transfer &mdash; <code>0x19cf143c2ab459807f3c0ebab40b4d444964a354aa07d2ef34999750a272af2</code></li>
+      <li>unshield &mdash; <code>0x50b26f277aab15d83dc83f2bf9eb426a92f496cf45e74812fe1366de8899654</code></li>
+    </ul>
+    <p>Proofs come from a proving service, because a phone cannot build a STARK
+       in reasonable time and the protocol is designed around that. The service
+       is meant to be run by whoever runs the wallet, and standing one up is the
+       remaining piece. When it cannot be reached the app says so before a
+       minute is spent finding out, and says whether anything moved.</p>
   </div>
 
   <footer>

@@ -95,9 +95,15 @@
   <h2>Your keys are yours, and so is the responsibility</h2>
   <div class="card">
     <p><strong>We cannot recover your wallet.</strong> Your recovery phrase is
-      generated on your device and never sent to us. If you lose it and lose the
-      device, the funds are gone permanently. Nobody, including us, can restore
-      them, reverse it, or make an exception.</p>
+      generated on your device. If you lose it and lose the device, the funds
+      are gone permanently. Nobody, including us, can restore them, reverse it,
+      or make an exception.</p>
+    <p>If you choose to make an encrypted backup, the phrase is sealed on your
+      device with a password only you know and we store the sealed result. We
+      cannot open it, and a lawful demand for it would yield unreadable data
+      rather than your phrase. Forgetting that password is the same as losing
+      the phrase: there is no reset, because there is nothing on our side to
+      reset it with.</p>
     <p><strong>We cannot reverse a transaction.</strong> Once a transfer is
       accepted by the network it is final. Sending to a wrong address means the
       funds are gone.</p>
@@ -119,9 +125,11 @@
 
   <h2>Privacy features</h2>
   <p>tip is built on STRK20, a shielded pool operated as part of the Starknet
-    protocol and not by us. Shielded transfers are not yet available in the app.
-    Ordinary transfers are fully public, and the app says so on every screen
-    where it matters. No privacy feature is a guarantee of anonymity against a
+    protocol and not by us. Shielded transfers are available in the app and have
+    been carried out on Starknet's Sepolia test network; they depend on a
+    proving service, and the app tells you when it cannot reach one. Ordinary
+    transfers are fully public, and the app says so on every screen where it
+    matters. No privacy feature is a guarantee of anonymity against a
     determined and well resourced observer.</p>
 
   <h2>The software is provided as it is</h2>

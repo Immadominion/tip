@@ -104,11 +104,28 @@
     <li>your email address, display name or username, and the account
       identifier your provider issues, if you use Google or X.</li>
   </ul>
-  <p>That is the whole list. It is stored by <a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase</a>,
-    who host authentication for us, and it exists so a future version can carry
-    your wallet to a second device and let people tip you by name rather than by
-    sixty-four hexadecimal digits.</p>
+  <p>It is stored by <a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase</a>,
+    who host authentication for us, and it exists so that your wallet can be
+    carried to a second device, and so a future version can let people tip you
+    by name rather than by sixty-four hexadecimal digits.</p>
   <p>Signing in does not give us your keys and does not let us move your money.</p>
+
+  <h2>If you make an encrypted backup</h2>
+  <p>Backing up is optional and separate from signing in. If you choose to make
+    one, we store <strong>one further thing</strong>: a sealed blob of data
+    holding your recovery phrase.</p>
+  <p>It is sealed on your device before it reaches us, with a key stretched from
+    a password only you know. We hold the result and cannot open it. A breach of
+    that table, or a lawful demand for its contents, yields unreadable data and
+    an offline guessing problem rather than anybody&rsquo;s funds.</p>
+  <p>Nothing identifying is stored beside it. Not your wallet address, not your
+    public key, not which chain you use. The row is already tied to your
+    account, and adding the address would hand us the exact link between a
+    person and their on-chain history that the rest of this product exists to
+    avoid.</p>
+  <p>You can delete it at any time, and deleting your account deletes it too.
+    Forgetting the password is the same as losing the phrase: there is no reset,
+    because there is nothing on our side to reset it with.</p>
 
   <h2>What we do not collect</h2>
   <ul>
@@ -116,6 +133,7 @@
     <li>No advertising identifiers and no third-party trackers</li>
     <li>No location, contacts, photos, or device fingerprinting</li>
     <li>No record of your balances, transactions, or who you pay</li>
+    <li>No readable copy of your recovery phrase, backed up or otherwise</li>
   </ul>
 
   <h2>What the camera does</h2>

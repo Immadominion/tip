@@ -1,6 +1,15 @@
 {
-  "transactions": [],
-  "contracts": [],
+  "transactions": [
+    "0x27db4ee66b994c211f31326361bdb8d44740f95262be4c6ace563ec5ca5e59f",
+    "0x3be9a8a80607f1403359a8468bd9ac6dcd7200f5dbfe1ff290945187fefd295",
+    "0x19cf143c2ab459807f3c0ebab40b4d444964a354aa07d2ef34999750a272af2",
+    "0x50b26f277aab15d83dc83f2bf9eb426a92f496cf45e74812fe1366de8899654"
+  ],
+  "network": "SN_SEPOLIA",
+  "contracts": [
+    "0x254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91"
+  ],
   "demo_video": "",
-  "demo_url": "https://usetip.xyz"
+  "demo_url": "https://usetip.xyz",
+  "notes": "Four transactions against the STRK20 Sepolia pool, each verified against the chain rather than copied from a log: register a viewing key, shield, private transfer, unshield. All four read ACCEPTED_ON_L2 / SUCCEEDED. Mainnet was not reached. The pool needs a proving service that participants are expected to self-host, which requires a v0.10 RPC and a large amd64 machine (StarkWare recommend 48 vCPU / 96 GB), and no mainnet discovery endpoint was published to us. tool/run-prover.sh stands one up on a fresh box, and the app can be pointed at a self-hosted prover with STRK20_SELF_HOSTED_PROVER."
 }

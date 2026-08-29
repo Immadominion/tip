@@ -39,6 +39,43 @@ flutter run
 Sepolia by default. `--dart-define=TIP_CHAIN=mainnet` for the real thing, so
 pointing at real money is deliberate rather than a default.
 
+### Turning the shielded side on
+
+The public wallet runs with no configuration. The shielded side does not: it
+needs a pool address and three services, and without them the app says the
+private balance is unavailable in this build rather than pretending it is empty.
+
+| Define | What it is |
+| --- | --- |
+| `STRK20_POOL` | Pool contract address |
+| `STRK20_DISCOVERY` | Discovery service, which finds the notes payable to you |
+| `STRK20_PROVER` | Proving service |
+| `STRK20_RPC` | A Starknet node that speaks v0.10 |
+| `STRK20_OHTTP_KEY` | Optional. A pinned OHTTP key config, base64 |
+| `STRK20_SELF_HOSTED_PROVER` | Optional. `true` selects the plain transport for the prover only |
+
+`app/tool/run-sepolia.sh` passes all of them, reading the endpoints from a
+`.strk20-env.json` at the repo root. **That file is not in this repository**:
+the STRK20 Sepolia environment was shared with participants in confidence, and
+the endpoints in it are not ours to publish. If you have your own pool
+deployment, the defines above are the whole interface.
+
+`STRK20_OHTTP_KEY` is worth pinning if you have it. Without it the key config is
+fetched over the same TLS the encryption exists to be independent of, which
+still defends against a passive observer but not against a hostile
+intermediary. The code says which is which.
+
+`STRK20_SELF_HOSTED_PROVER` exists because a bare prover has no OHTTP gateway in
+front of it. It is declared rather than detected, so that a gateway being
+unreachable can never silently downgrade the encryption. Set it only for a
+prover you run yourself, and note that the prover sees your viewing key —
+`compile_actions` takes it as an argument — so plaintext to a prover you do not
+control is not an option. Discovery stays encrypted either way.
+
+`tool/run-prover.sh` stands a prover up on a fresh machine: it checks the
+architecture, checks the node really speaks v0.10 before spending a build on it,
+builds for the host CPU, and asks whether the result is alive.
+
 ## Packages
 
 ### `packages/tip_privacy`
