@@ -14,7 +14,7 @@ import 'package:tip_privacy/tip_privacy.dart' as tp;
 
 import '../chain/amount.dart';
 import '../chain/token.dart';
-import '../privacy/pool_session.dart';
+import '../privacy/operation_error.dart';
 import '../privacy/private_operations.dart';
 import '../privacy/privacy_controller.dart';
 import '../theme/palette.dart';
@@ -111,12 +111,10 @@ class _ShieldScreenState extends State<ShieldScreen> {
       });
       unawaited(widget.privacy.refresh());
       unawaited(widget.wallet.refresh());
-    } on OperationRefused catch (refusal) {
-      _fail(refusal.message);
-    } on PoolException catch (failure) {
-      _fail(failure.message);
     } catch (error) {
-      _fail('$error');
+      // One path for every failure, because the message a user needs depends
+      // on how far the operation got rather than on which type was thrown.
+      _fail(describeFailure(error, stage: _stage).message);
     }
   }
 
