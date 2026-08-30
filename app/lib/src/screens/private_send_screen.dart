@@ -5,8 +5,12 @@
 ///
 /// Two things it has to be straight about. The recipient must already have
 /// registered with the pool, because a note is encrypted to their viewing key
-/// and there is nobody to encrypt it to otherwise. And unlike the public send
-/// screen, nothing here appears on chain: not the amount, not either party.
+/// and there is nobody to encrypt it to otherwise. And the privacy has an edge:
+/// the amount, the recipient and which notes moved are all hidden, but the
+/// sender signs the transaction with their own account and pays the fee from
+/// their own public balance, so the chain does record that this account used
+/// the pool. Saying otherwise would be the same overstatement the register
+/// screen and the privacy policy were corrected for.
 library;
 
 import 'dart:async';
@@ -323,14 +327,16 @@ class _NothingOnChain extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Nothing about this appears on chain',
+                  'The payment is hidden. Your account is not',
                   style:
                       text.titleSmall?.copyWith(color: TipPalette.accentDeep),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Not the amount, not you, not them. An observer sees that '
-                  'the pool was used and nothing else.',
+                  'Not the amount, not the recipient, not which notes moved. '
+                  'But you sign this transaction yourself and pay the fee '
+                  'from your public balance, so an observer sees that this '
+                  'account used the pool, and when.',
                   style: text.bodySmall,
                 ),
               ],

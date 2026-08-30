@@ -339,7 +339,7 @@ class _PrivateHero extends StatelessWidget {
               ),
         PrivacyState.ready => _Amount(
             amount: controller.total,
-            note: 'Shielded. Visible only to you.',
+            note: 'Shielded. Not on chain.',
           ),
       },
     );

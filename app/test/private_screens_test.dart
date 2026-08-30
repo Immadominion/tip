@@ -112,11 +112,18 @@ void main() {
           (w, p) => PrivateSendScreen(wallet: w, privacy: p),
         );
 
-    testWidgets('claims nothing appears on chain', (tester) async {
+    testWidgets('draws the line where the chain actually draws it',
+        (tester) async {
+      // The screen used to say "not the amount, not you, not them", which is
+      // wrong about you: the submission carries sender_address = this account
+      // and no paymaster, so the chain records that this account used the
+      // pool. Overstating that is the same error the register screen and the
+      // privacy policy were corrected for, in the place a user reads it right
+      // before deciding to send.
       final (w, p) = await pump(tester);
-      expect(find.text('Nothing about this appears on chain'), findsOneWidget);
-      expect(find.textContaining('Not the amount, not you, not them'),
+      expect(find.text('The payment is hidden. Your account is not'),
           findsOneWidget);
+      expect(find.textContaining('this account used the pool'), findsOneWidget);
       w.dispose();
       p.dispose();
     });
