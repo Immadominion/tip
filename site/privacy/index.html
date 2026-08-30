@@ -89,12 +89,31 @@
     than broad.</p>
 
   <h2>What never leaves your phone</h2>
-  <p>Your recovery phrase, the private key derived from it, your STRK20 viewing
-    key, and your activity history are generated on your device and held in the
-    platform keystore, which is the iOS Keychain or the Android Keystore.</p>
+  <p>Your recovery phrase, the private key derived from it, and your activity
+    history are generated on your device and held in the platform keystore,
+    which is the iOS Keychain or the Android Keystore.</p>
   <p><strong>We have no copy of any of them and no way to obtain one.</strong>
     Not on request, not under compulsion. There is nothing on our side to hand
     over. This also means we cannot recover your wallet if you lose the phrase.</p>
+
+  <h2>Your viewing key, which does leave your phone</h2>
+  <p>This page previously listed the STRK20 viewing key alongside the items
+    above. That was wrong, and it is the correction that matters most on this
+    page.</p>
+  <p>The viewing key is what decrypts the notes paid to you. Finding those notes
+    means asking a discovery service which ones are yours, and in STRK20 as it
+    exists today that service does the decrypting — so the key is sent to it.
+    <strong>Whoever runs that service can therefore read your shielded balance
+    and your shielded history.</strong> Today that service is StarkWare's, not
+    ours. We never receive the key, but "we do not have it" is not the same as
+    "nobody does", and you should judge the privacy you are getting on the
+    second statement rather than the first.</p>
+  <p>The request is encrypted with Oblivious HTTP so that whoever carries the
+    traffic cannot read it. That protects the key from the network, not from the
+    service it is addressed to.</p>
+  <p>The protocol allows the decryption to happen on your device instead, and
+    the code to do it is written and tested. It is not yet connected. Until it
+    is, treat your shielded activity as visible to the discovery service.</p>
 
   <h2>What we collect when you sign in</h2>
   <p>Signing in is optional. The wallet works without it. If you do sign in, we

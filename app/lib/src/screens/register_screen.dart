@@ -210,16 +210,22 @@ class _WhatThisDoes extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'The key stays on this phone',
+                  'Who can see your private balance',
                   style:
                       text.titleSmall?.copyWith(color: TipPalette.accentDeep),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'It comes from your recovery phrase, so the same phrase gets '
-                  'it back on a new device. What goes on chain is the public '
-                  'half, which is what lets someone send you a note only you '
-                  'can read.',
+                  'The key comes from your recovery phrase, so the same phrase '
+                  'gets it back on a new device, and only the public half goes '
+                  'on chain.\n\n'
+                  'But finding the notes paid to you means asking a discovery '
+                  'service, and today that service does the decrypting — so it '
+                  'receives your viewing key and can read your shielded '
+                  'balance and history. It is StarkWare\u2019s service, not '
+                  'ours, and the request is encrypted in transit. Nobody else '
+                  'can see it. That is the honest limit of the privacy you get '
+                  'today.',
                   style: text.bodySmall,
                 ),
               ],

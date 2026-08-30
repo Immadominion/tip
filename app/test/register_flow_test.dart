@@ -174,7 +174,8 @@ void main() {
     p.dispose();
   });
 
-  testWidgets('it does not claim the key leaves the device', (tester) async {
+  testWidgets('it says who can actually read the shielded balance',
+      (tester) async {
     final (w, p) = await _pumpHome(tester);
 
     await tester.tap(find.text('Private'));
@@ -182,7 +183,11 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Set up private balance'));
     await tester.pumpAndSettle();
 
-    expect(find.text('The key stays on this phone'), findsOneWidget);
+    // The screen used to say "The key stays on this phone", which is false:
+    // the discovery service receives the viewing key and decrypts with it. A
+    // privacy product may not overstate its own privacy.
+    expect(find.text('Who can see your private balance'), findsOneWidget);
+    expect(find.textContaining('receives your viewing key'), findsOneWidget);
 
     w.dispose();
     p.dispose();
