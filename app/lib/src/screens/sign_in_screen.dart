@@ -122,8 +122,8 @@ class _SignInScreenState extends State<SignInScreen> {
         Text('Sign in', style: text.displayLarge),
         const SizedBox(height: TipTheme.spaceSm),
         Text(
-          'So your wallet can follow you to another phone, and so people can '
-          'tip you by name instead of by address.',
+          'So your wallet can follow you to another phone. Tipping by name '
+          'rather than by address is planned and not built yet.',
           style: text.bodyMedium,
         ),
         const SizedBox(height: TipTheme.spaceXl),
