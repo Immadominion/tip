@@ -7,6 +7,7 @@
 /// revert the user pays for.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:starknet/starknet.dart';
 import 'package:starknet_provider/starknet_provider.dart';
 
@@ -109,10 +110,11 @@ class TransferService {
     // estimate, so there is nothing useful to price until the amount fits.
     if (blockers.isEmpty) {
       try {
-        bounds = FeeBounds.from(
-          await client.accountFor(from).getEstimateMaxFeeForInvokeTx(
-                functionCalls: [_transferCall(token, recipient, amount)],
-              ),
+        bounds = await estimateTransfer(
+          from: from,
+          token: token,
+          recipient: recipient,
+          amount: amount,
         );
         fee = TokenAmount(bounds.estimatedFee, _feeToken);
         maxFee = TokenAmount(bounds.maxFee, _feeToken);
@@ -157,6 +159,27 @@ class TransferService {
       bounds: bounds,
     );
   }
+
+  /// Prices one transfer against the node.
+  ///
+  /// Its own method so it can be overridden. Everything interesting in [quote]
+  /// happens *after* the estimate — whether the amount and the fee are coming
+  /// out of the same pot, what is left, what to tell the user — and none of it
+  /// could be tested without either a live node or a stubbed SDK `Account`.
+  /// This is the only line that has to reach the network, so it is the only
+  /// line a test needs to replace.
+  @protected
+  Future<FeeBounds> estimateTransfer({
+    required SigningAccount from,
+    required TipToken token,
+    required Felt recipient,
+    required TokenAmount amount,
+  }) async =>
+      FeeBounds.from(
+        await client.accountFor(from).getEstimateMaxFeeForInvokeTx(
+              functionCalls: [_transferCall(token, recipient, amount)],
+            ),
+      );
 
   /// The most of [balance] that can be sent once [fee] is kept back.
   ///
